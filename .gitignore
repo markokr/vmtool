@@ -1,0 +1,9 @@
+dist
+tmp
+MANIFEST
+__pycache__
+.pytest_cache
+.tox
+*.py[co]
+*.swp
+*.egg-info

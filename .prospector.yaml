@@ -1,0 +1,82 @@
+
+strictness: high
+
+max-line-length: 170
+
+member-warnings: true
+
+doc-warnings: false
+
+test-warnings: true
+
+pylint:
+  run: true
+  options:
+    init-import: true
+    dummy-variables-rgx: _$|dummy|___
+    max-parents: 20
+
+  disable:
+    # lowprio
+    - using-constant-test
+    - protected-access
+    - line-too-long
+    - arguments-differ
+    - useless-object-inheritance
+    - consider-using-get
+    - chained-comparison
+    - consider-using-in
+
+    # style
+    - bad-whitespace
+    - multiple-imports
+    - pointless-statement
+    - pointless-string-statement
+    - redefined-outer-name
+    - redefined-variable-type
+    - superfluous-parens
+    - too-many-boolean-expressions
+    - too-many-nested-blocks
+    - ungrouped-imports
+    - unnecessary-pass
+    - unneeded-not
+    - unreachable
+    - unused-variable
+    - wrong-import-order
+    - wrong-import-position
+    - trailing-newlines
+
+    # noise
+    - no-else-return
+    - consider-using-ternary
+    - bare-except
+    - broad-except
+    - invalid-name
+    - multiple-statements
+    - no-self-use
+    - too-many-arguments
+    - too-many-branches
+    - too-many-instance-attributes
+    - too-many-lines
+    - too-many-locals
+    - too-many-return-statements
+    - too-many-statements
+    - unused-argument
+
+pyflakes:
+  disable:
+    - F401
+    - F403
+    - F811
+    - F841
+    - F999
+
+mccabe:
+  run: false
+
+pep8:
+  run: false
+
+dodgy:
+  run: false
+

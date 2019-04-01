@@ -1,0 +1,6 @@
+
+include README.rst MANIFEST.in LICENSE
+include tox.ini requirements.txt run_vmtool.sh
+include doc/*.rst
+include tests/*.py
+
