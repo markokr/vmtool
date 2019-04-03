@@ -3208,7 +3208,9 @@ class VmTool(EnvScript):
         state_file = self.cf.get('tf_state_file')
         tfvars = tf_load_all_vars(state_file)
         for k in sorted(tfvars.keys()):
-            printf("%s = %s", k, tfvars[k])
+            parts = k.split('.')
+            if len(parts) <= 3 or self.options.all:
+                printf("%s = %s", k, tfvars[k])
 
     def cmd_show_config(self, *args):
         """Show filled config for current VM.
