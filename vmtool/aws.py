@@ -19,7 +19,6 @@ import stat
 import ipaddress
 import datetime
 import errno
-import argparse
 
 from fnmatch import fnmatch
 
