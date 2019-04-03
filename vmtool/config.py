@@ -47,7 +47,6 @@ class Config(object):
                 self.defs['config_file'] = filename
             if user_defs:
                 self.defs.update(user_defs)
-            print('defs: %r' % self.defs)
 
         self.main_section = main_section
         self.filename = filename
