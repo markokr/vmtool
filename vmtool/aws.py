@@ -683,15 +683,21 @@ class VmTool(EnvScript):
             ssh_tags.append(tag)
         client.create_tags(Resources=[vm_id], Tags=ssh_tags)
 
-        pub_dns = None
-        pub_ip = None
         for vm in self.ec2_iter_instances(InstanceIds=[vm_id]):
             pub_dns = vm.get('PublicDnsName')
             pub_ip = vm.get('PublicIpAddress')
 
-        for tag in ssh_tags:
-            ssh_add_known_host(self.ssh_known_hosts, pub_dns, pub_ip,
-                               tag['Key'], tag['Value'], vm_id)
+            if pub_ip:
+                for tag in ssh_tags:
+                    ssh_add_known_host(self.ssh_known_hosts, pub_dns, pub_ip,
+                                       tag['Key'], tag['Value'], vm_id)
+
+            priv_dns = vm.get('PrivateDnsName') or None
+            priv_ip = vm.get('PrivateIpAddress')
+            if priv_ip:
+                for tag in ssh_tags:
+                    ssh_add_known_host(self.ssh_known_hosts, priv_dns, priv_ip,
+                                       tag['Key'], tag['Value'], vm_id)
 
     def put_known_host_from_tags(self, vm_id):
         """Get ssh keys from tags.

@@ -55,6 +55,10 @@ def hash_known_host(host, old_entry=None):
 
 
 def ssh_add_known_host(kh_file, dns, ip, ktype, kval, vm_id, hash_hosts=True):
+    fdir = os.path.dirname(kh_file)
+    if not os.path.isdir(fdir):
+        os.makedirs(fdir, 0o700, exist_ok=True)
+
     space_rc = re.compile('[ \t]+')
     new_file = []
     if os.path.isfile(kh_file):
@@ -77,26 +81,26 @@ def ssh_add_known_host(kh_file, dns, ip, ktype, kval, vm_id, hash_hosts=True):
             if kt != ktype and ktype != 'ecdsa-sha2-nistp256':
                 pass
             elif adr.startswith('|1|'):
-                if adr == hash_known_host(ip, adr):
+                if ip and adr == hash_known_host(ip, adr):
                     if old_key == cur_key:
                         found_ip = True
                     else:
                         drops = True
                         continue  # drop
-                elif adr == hash_known_host(dns, adr):
+                elif dns and adr == hash_known_host(dns, adr):
                     if old_key == cur_key:
                         found_dns = True
                     else:
                         drops = True
                         continue  # drop
             else:
-                if adr == ip:
+                if ip and adr == ip:
                     if old_key == cur_key:
                         found_ip = True
                     else:
                         drops = True
                         continue  # drop
-                elif adr == dns:
+                elif dns and adr == dns:
                     if old_key == cur_key:
                         found_dns = True
                     else:
