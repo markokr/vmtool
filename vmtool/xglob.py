@@ -4,14 +4,21 @@ Basic syntax:
 
 *       - anything, except /
 ?       - any char, except /
-[]      - char in set
-[!]     - char not in set
+[...]   - char in set
+[!...]  - char not in set
 
-Extended syntax:
+Recursion syntax (globstar):
 
-**      - any subdir
-()      - grouping
-|       - or
+**      - recurse into subdirectories
+
+Extended syntax (extglob):
+
+?()     - zero or one of group
+*()     - any number occurances of group
++()     - one or more occurances of group
+@()     - one occurances of group
+!()     - no occurance of group
+|       - separate group elements
 
 """
 
@@ -19,132 +26,167 @@ import sys
 import os
 import os.path
 import re
+import functools
 
-__all__ = ['xglob']
+__all__ = ['xglob', 'xfilter']
+
+
+# special regex symbols
+_RXMAGIC = re.compile(r'[][(){}\\.?*+|^$]')
+
+# glob magic
+_GMAGIC = re.compile(r'[][()*?]')
+
+# glob tokens
+_GTOK = re.compile(r"""
+ [*?+@!] \( |
+ \[ [!\]]? . [^\]]* \] |
+ [*?|)]
+""", re.X | re.S)
+
+# map glob syntax to regex syntax
+_PARENS = {
+    '?(': ['(?:', ')?'],
+    '*(': ['(?:', ')*'],
+    '+(': ['(?:', ')+'],
+    '@(': ['(?:', ')'],
+    '!(': ['(?!', ')'],
+}
+
+
+def escape(s):
+    """Escape glob meta-characters.
+    """
+    return _GMAGIC.sub(r'[\g<0>]', s)
 
 
 def re_escape(s):
-    """Escape regex meta-characters"""
-    return re.sub(r'[][(){}\\.?*+|^$]', lambda m: '\\' + m.group(0), s)
+    """Escape regex meta-characters.
+    """
+    return _RXMAGIC.sub(r'\\\g<0>', s)
 
 
 def has_magic(pat):
-    """Contains glob magic chars."""
-    return re.search(r'[*?[()|]', pat) is not None
+    """Contains glob magic chars.
+    """
+    return _GMAGIC.search(pat) is not None
 
 
-def xcompile(pat):
-    """Convert glob/fnmatch pattern to compiled regex."""
+def _nomatch(name):
+    """Invalid pattern does not match anything.
+    """
+    return None
+
+
+@functools.lru_cache(maxsize=256, typed=True)
+def _compile(pat):
+    """Convert glob/fnmatch pattern to compiled regex.
+    """
     plen = len(pat)
     pos = 0
     res = []
+    parens = []
     while pos < plen:
-        c = pat[pos]
-        pos += 1
-        if c == '?':
+        m = _GTOK.search(pat, pos)
+        if not m:
+            res.append(re_escape(pat[pos:]))
+            break
+        p1 = m.start()
+        if p1 > pos:
+            res.append(re_escape(pat[pos:p1]))
+        pos = m.end()
+
+        c = m.group(0)
+        if len(c) > 1:
+            if c[0] == '[':
+                if c[1] == '!':
+                    x = '[^' + re_escape(c[2:-1]) + ']'
+                else:
+                    x = '[' + re_escape(c[1:-1]) + ']'
+            elif c in _PARENS:
+                x = _PARENS[c][0]
+                parens.append(_PARENS[c][1])
+            else:
+                x = re_escape(c)
+        elif c == '?':
             x = '.'
         elif c == '*':
             x = '.*'
             if res and res[-1] == x:
                 continue
-        elif c in '()|':
+        elif c == ')' and parens:
+            x = parens.pop()
+        elif c == '|' and parens:
             x = c
-        elif c == '[':
-            x = c
-
-            # first char is ! or ^
-            if pos < plen and (pat[pos] == '!' or pat[pos] == '^'):
-                x += '^'
-                pos += 1
-
-            # first char is ]
-            if pos < plen and pat[pos] == ']':
-                x += r'\]'
-                pos += 1
-
-            # loop until ]
-            while pos < plen:
-                c = pat[pos]
-                pos += 1
-                if c == ']':
-                    x += ']'
-                    break
-                x += re_escape(c)
         else:
-            # not ?*(|)[
             x = re_escape(c)
         res.append(x)
+
+    if parens:
+        return _nomatch
+
     xre = r'\A' + ''.join(res) + r'\Z'
-    return re.compile(xre, re.S)
+    return re.compile(xre, re.S).match
 
 
-def xfilter(pattern, names):
+def xfilter(pat, names):
     """Filter name list based on glob pattern.
     """
-    rc = xcompile(pattern)
-    if pattern[0] != '.':
-        names = [n for n in names if n[0] != '.' and rc.match(n)]
+    matcher = _compile(pat)
+    if pat[0] != '.':
+        for n in names:
+            if n[0] != '.' and matcher(n):
+                yield n
     else:
-        names = [n for n in names if rc.match(n)]
-    return names
+        for n in names:
+            if matcher(n):
+                yield n
 
 
-def dirglob_nopat(dirname, basename, need_dirs):
-    """File name without pattern."""
-    res = []
+def dirglob_nopat(dirname, basename, dirs_only):
+    """File name without pattern.
+    """
     if basename == '':
         if os.path.isdir(dirname):
-            res.append(basename)
+            yield basename
     elif os.path.lexists(os.path.join(dirname, basename)):
-        res.append(basename)
-    return res
+        yield basename
 
 
-def dirglob_pat(dirname, pattern, need_dirs):
-    """File name with pattern."""
+def dirglob_pat(dirname, pattern, dirs_only):
+    """File name with pattern.
+    """
     if not isinstance(pattern, bytes) and isinstance(dirname, bytes):
         dirname = dirname.decode(sys.getfilesystemencoding() or sys.getdefaultencoding())
     try:
         names = os.listdir(dirname)
     except os.error:
-        return []
+        return iter([])
     return xfilter(pattern, names)
 
 
-def dirglob_subtree(dirname, pattern, need_dirs):
-    """File name is '**'."""
-    res = []
+def dirglob_subtree(dirname, pattern, dirs_only):
+    """File name is '**', recurse into subtrees.
+    """
     for dp, dnames, fnames in os.walk(dirname, topdown=True):
         if dp == dirname:
-            res.append('')
             basedir = ''
+            yield basedir
         else:
             basedir = dp[len(dirname) + 1:] + os.path.sep
-        if not need_dirs:
+
+        if not dirs_only:
             for fn in fnames:
                 if fn[0] != '.':
-                    res.append(basedir + fn)
+                    yield basedir + fn
 
-        skip_dirs = []
         for dn in dnames:
             if dn[0] != '.':
-                res.append(basedir + dn)
-            else:
-                skip_dirs.append(dn)
-
-        # don't recurse into dot-dirs
-        for dn in skip_dirs:
-            dnames.remove(dn)
-
-    return res
+                yield basedir + dn
 
 
-def xglob(pat, _dirs_only=False):
-    """Extended glob.
-
-    Supports ** and (|) in pattern.
-
-    Acts as iterator.
+def _xglob(pat, dirs_only=False):
+    """Internal implementation.
     """
 
     # plain path?
@@ -157,13 +199,13 @@ def xglob(pat, _dirs_only=False):
     dn, bn = os.path.split(pat)
     if not dn:
         # pattern without dir part
-        for name in dirglob_pat(os.curdir, bn, _dirs_only):
+        for name in dirglob_pat(os.curdir, bn, dirs_only):
             yield name
         return
 
     # expand dir part
     if has_magic(dn):
-        dirs = xglob(dn, True)
+        dirs = _xglob(dn, True)
     else:
         dirs = iter([dn])
 
@@ -177,8 +219,18 @@ def xglob(pat, _dirs_only=False):
 
     # loop over files
     for dn in dirs:
-        for name in dirglob(dn, bn, _dirs_only):
+        for name in dirglob(dn, bn, dirs_only):
             yield os.path.join(dn, name).replace(os.path.sep, '/')
+
+
+def xglob(pat):
+    """Extended glob.
+
+    Supports ** and extended glob syntax in pattern.
+
+    Acts as iterator.
+    """
+    return _xglob(pat)
 
 
 def main():
