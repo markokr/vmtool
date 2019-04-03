@@ -111,6 +111,8 @@ class EnvScript(object):
                        help="print version info and exit")
         p.add_argument("--set", action="append",
                        help="override config setting (--set 'PARAM=VAL')")
+        p.add_argument("command", help="command name")
+        p.add_argument("args", nargs=argparse.REMAINDER, help="arguments for command")
         return p
 
     def reload(self):
@@ -157,14 +159,14 @@ class EnvScript(object):
     def load_config(self):
         """Loads config.
         """
-        fn = self.args[0]
+        fn = self.options.command
         return Config(self.service_name, fn, user_defs=self.cf_defaults, override=self.cf_override)
 
     def work(self):
         """Non-looping work function, calls command function."""
 
-        cmd = self.args[0]
-        cmdargs = self.args[1:]
+        cmd = self.options.command
+        cmdargs = self.options.args
 
         # find function
         fname = "cmd_" + cmd.replace('-', '_')

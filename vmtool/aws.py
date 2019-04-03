@@ -228,9 +228,6 @@ class VmTool(EnvScript):
         p.add_argument("--ssh-key", help="Use different SSH key")
         p.add_argument("--all-role-vms", action="store_true", help="Run command on all vms for role")
         p.add_argument("--running", action="store_true", help="Show only running instances")
-
-        p.add_argument("command", help="command name")
-        p.add_argument("args", nargs=argparse.REMAINDER, help="arguments for command")
         return p
 
     def get_boto3_session(self, region=None):
@@ -2850,7 +2847,7 @@ class VmTool(EnvScript):
 
     def work(self):
         cmd = self.options.command
-        cmdargs = self.options.cmdargs
+        cmdargs = self.options.args
         if not cmd:
             raise UsageError("Need command")
         #eprintf('vmtool - env_name: %s  git_dir: %s', self.env_name, self.git_dir)
