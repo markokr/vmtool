@@ -280,9 +280,9 @@ class AdvancedInterpolation(Interpolation):
         super(AdvancedInterpolation, self).__init__()
         self._func_map = func_map
 
-    def before_get(self, parser, section, option, rawval, defaults):
+    def before_get(self, parser, section, option, value, defaults):
         dst = []
-        self._interpolate_ext_new(dst, parser, section, option, rawval, defaults, set())
+        self._interpolate_ext_new(dst, parser, section, option, value, defaults, set())
         return ''.join(dst)
 
     def before_set(self, parser, section, option, value):
