@@ -24,7 +24,6 @@ from fnmatch import fnmatch
 
 import boto3.session
 import boto3.s3.transfer
-import urllib.request
 
 from vmtool.util import ssh_add_known_host, parse_console, rsh_quote, as_unicode
 from vmtool.util import printf, eprintf, time_printf, print_json, local_cmd, run_successfully
@@ -133,8 +132,6 @@ class VmTool(EnvScript):
 
         self._region = self.cf.get('region')
         self.ssh_known_hosts = os.path.join(self.ssh_dir, 'known_hosts')
-        self.domain = self.cf.get('domain')
-        self.master_domain = self.cf.get('master_domain', self.domain)
         self.is_live = self.cf.getint('is_live', 0)
 
     def load_gpg_file(self, fn):
@@ -1314,8 +1311,7 @@ class VmTool(EnvScript):
         slot_filter = ''
 
         bucket_name = self.cf.get('backup_aws_bucket')
-        backup_domain = self.master_domain or self.domain
-        pfx = backup_domain + '/'
+        pfx = self.cf.get('backup_prefix')
         if slot_list:
             slot_filter = slot_list[0]
             pfx += slot_filter
@@ -1324,6 +1320,7 @@ class VmTool(EnvScript):
 
         eprintf("---- %s ----", bucket_name)
         slots = {}
+        backup_domain = pfx.split('/')[0]
         for kx in self.s3_iter_objects(bucket_name, pfx):
             parts = kx['Key'].split('/')
             if parts[0] != backup_domain:
@@ -1351,14 +1348,13 @@ class VmTool(EnvScript):
         """
         s3 = self.get_s3()
         bucket_name = self.cf.get('backup_aws_bucket')
-        backup_domain = self.master_domain or self.domain
+        pfx = self.cf.get('backup_prefix')
 
         # disable multipart downloads
         tx_config = boto3.s3.transfer.TransferConfig(
             multipart_threshold=16 * 1024 * 1024 * 1024,
             max_concurrency=1)
 
-        pfx = backup_domain + '/'
         if slot_list:
             pfx += slot_list[0]
 
@@ -1422,14 +1418,14 @@ class VmTool(EnvScript):
         min_slot = dt_pos.strftime('%Y/%m/%d')
 
         bucket_name = self.cf.get('backup_aws_bucket')
-        backup_domain = self.master_domain or self.domain
-        pfx = backup_domain + '/'
+        pfx = self.cf.get('backup_prefix')
         rc_test = re.compile(r'^\d\d\d\d/\d\d/\d\d$')
 
         printf("---- %s ----", bucket_name)
         slots = {}
         del_list = []
         keep_set = set()
+        backup_domain = pfx.split('/')[0]
         for kx in self.s3_iter_object_versions(bucket_name, pfx):
             parts = kx['Key'].split(':')[0].split('/')
             if parts[0] != backup_domain:
@@ -1465,8 +1461,7 @@ class VmTool(EnvScript):
         s3client = self.get_s3()
 
         bucket_name = self.cf.get('backup_aws_bucket')
-        backup_domain = self.master_domain or self.domain
-        pfx = backup_domain + '/'
+        pfx = self.cf.get('backup_prefix')
 
         smap = {
             'STANDARD': 'S',
@@ -1857,9 +1852,6 @@ class VmTool(EnvScript):
         printf("VM ID: %s", ", ".join(ids))
         printf("Total time: %s", fmt_dur(end - start))
 
-        self.cmd_wait_sys_ready()
-        self.cmd_initial_setup()
-
         return first
 
     def cmd_create_branch(self, *provider_ids):
@@ -1882,56 +1874,6 @@ class VmTool(EnvScript):
         printf("VM ID: %s", ", ".join(ids))
         printf("Total time: %d", int(end - start))
         return first
-
-    def cmd_initial_setup(self):
-        """Run syscli to do initial setup.
-
-        Group: vm
-        """
-        if self.domain != self.master_domain:
-            print("Skipping initial setup")
-            return
-        if self.cf.getboolean('skip_sysapi', 0):
-            printf("Skipping sysapi setup")
-            return
-
-        self.run_syscli('initial-setup')
-
-    def run_syscli(self, syscli_cmd):
-        cmd = [sys.executable, './syscli.py', "--env=" + self.env_name, syscli_cmd]
-        printf("launching: " + ' '.join(cmd))
-        run_successfully(cmd, cwd=self.git_dir + "/backend/local")
-
-    def cmd_wait_sys_ready(self):
-        """Wait until sysapi is ready
-
-        Group: vm
-        """
-        if self.cf.getboolean('skip_sysapi', 0):
-            printf("Skipping sysapi wait")
-            return
-        printf("Waiting until /sys api works")
-        time.sleep(10)
-        while 1:
-            time.sleep(5)
-            try:
-                url = "https://%s/sys/ping" % self.domain
-                hdr = {'Content-Type': 'application/json', 'User-Agent': 'vmtool'}
-                req = urllib.request.Request(url, data=b'', headers=hdr, method='POST')
-                resp = urllib.request.urlopen(req)
-            except Exception as err:
-                printf('Request failed: %s', str(err))
-                continue
-
-            if resp.status < 300:
-                printf("... Unexpected success?")
-                break
-            elif resp.status == 401:
-                printf("... Got 401, /sys seems fine")
-                break
-            else:
-                printf("... Unexpected code=%s", resp.status)
-                break
 
     def cmd_add_key(self, vm_id):
         """Extract SSH key from VM add EC2 tag.
@@ -2131,9 +2073,6 @@ class VmTool(EnvScript):
             'INSTANCE_NAME': vm_id,
             'ENV_NAME': self.env_name,
             'VMTYPE': vmtype,
-            #'FULL_DOMAIN': self.domain,
-            #'FULL_HOSTNAME': self.domain,
-            #'DOMAIN_REGEX': self.domain.replace('.', '\\.'),
         }
         if extra_defs:
             defs.update(extra_defs)
@@ -2520,7 +2459,7 @@ class VmTool(EnvScript):
             launcher = 'sudo -nH -u %s %s' % (run_user, launcher)
             rm_cmd = 'sudo -nH ' + rm_cmd
 
-        args = [self.domain, self.master_domain, vm_id, root_id, vmtype, root_private_ip]
+        args = [vm_id, root_id, vmtype, root_private_ip]
         args.extend(xargs)
         tmp_uuid = str(uuid.uuid4())
 
@@ -2532,13 +2471,6 @@ class VmTool(EnvScript):
         runit_script = 'cd "tmp/%s/vmlib" && %s && cd ../../.. && %s "tmp/%s"' % (tmp_uuid, launcher, rm_cmd, tmp_uuid)
         cmdline = ["/bin/sh", "-c", runit_script, 'runit'] + args
         self.vm_exec(vm_id, cmdline, None, use_admin=use_admin)
-
-    def run_tgz_data(self, data, remote_script, vm_id, vmtype, root_id, root_private_ip='some_ip', use_admin=False):
-        time_printf("%s: Sending data - %d bytes", vm_id, len(data))
-        self.vm_exec(vm_id, ["tar", "xzf", "-", "--warning=no-timestamp"], data, use_admin=use_admin)
-        time_printf("%s: Running", vm_id)
-        self.vm_exec(vm_id, [remote_script, self.domain, self.master_domain, vm_id, root_id, vmtype, root_private_ip],
-                     use_admin=use_admin)
 
     def cmd_get_output(self, vm_id):
         """Print console output.
@@ -2645,7 +2577,7 @@ class VmTool(EnvScript):
         printf("Attached ENI: %s", internal_eni)
 
     def raw_assign_vm_eip(self, vm_id, ip):
-        time_printf("Associating address %s (%s) with %s", self.domain, ip, vm_id)
+        time_printf("Associating address %s with %s", ip, vm_id)
         client = self.get_ec2_client()
 
         alloc_id = None
