@@ -19,6 +19,7 @@ import stat
 import ipaddress
 import datetime
 import errno
+import binascii
 
 from fnmatch import fnmatch
 
@@ -538,7 +539,8 @@ class VmTool(EnvScript):
         logging.debug("EXEC@%s: %s", vm_id, cmdline)
         self.put_known_host_from_tags(vm_id)
 
-        if not self.cf.getboolean('user_access_works', False):
+        # only image default user works?
+        if not self.cf.getboolean('ssh_user_access_works', False):
             use_admin = True
 
         ssh = self.ssh_cmdline(use_admin=use_admin)
@@ -549,6 +551,9 @@ class VmTool(EnvScript):
         if self.options.host:
             # use host directly, dangerous
             hostname = self.options.host
+        elif self.cf.getboolean('ssh_internal_ip_works', False):
+            vm = self.vm_lookup(vm_id)
+            hostname = vm.get('PrivateIpAddress')
         else:
             # FIXME: vm with ENI
             vm = self.vm_lookup(vm_id)
@@ -2032,7 +2037,9 @@ class VmTool(EnvScript):
             return master_key_conf
 
         if key == 'SYSRANDOM':
-            return os.urandom(512)
+            blk = os.urandom(3*16)
+            b64 = binascii.b2a_base64(blk).strip()
+            return b64.decode('utf8')
 
         if key == 'AUTHORIZED_KEYS':
             auth_users = self.cf.getlist('ssh_authorized_users', [])
@@ -2040,9 +2047,9 @@ class VmTool(EnvScript):
             keys = []
             for user in sorted(set(auth_users)):
                 fn = os.path.join(self.keys_dir, pat.replace('USER', user))
-                pubkey = open(fn, 'rb').read().strip()
+                pubkey = open(fn, 'r').read().strip()
                 keys.append(pubkey)
-            return b'\n'.join(keys)
+            return '\n'.join(keys)
 
         if key == 'AUTHORIZED_USER_CREATION':
             auth_groups = self.cf.getlist('authorized_user_groups', [])
