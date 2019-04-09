@@ -63,12 +63,30 @@ SSH_CONFIG = [
     '-o', 'PreferredAuthentications=publickey',
 ]
 
+
 def show_commits(old_id, new_id, dirs, cwd):
     cmd = ['git', 'shortlog', '--no-merges', old_id + '..' + new_id]
     if dirs:
         cmd.append('--')
         cmd.extend(dirs)
     subprocess.call(cmd, cwd=cwd)
+
+SSH_USER_CREATION = '''
+adduser --gecos "{user}" --disabled-password {user} < /dev/null
+install -d -o {user} -g {user} -m 700  ~{user}/.ssh
+echo "{pubkey}" > ~{user}/.ssh/authorized_keys
+chmod 600 ~{user}/.ssh/authorized_keys
+chown {user}:{user} ~{user}/.ssh/authorized_keys
+
+for grp in {auth_groups}; do
+    adduser "{user}" "$grp"
+done
+
+'''
+
+def mk_sshuser_script(user, auth_groups, pubkey):
+    return SSH_USER_CREATION.format(user=user, auth_groups=' '.join(auth_groups), pubkey=pubkey)
+
 
 class VmTool(EnvScript):
     __doc__ = __doc__
@@ -2058,15 +2076,8 @@ class VmTool(EnvScript):
             script = []
             for user in sorted(set(auth_users)):
                 fn = os.path.join(self.keys_dir, pat.replace('USER', user))
-                pubkey = open(fn, 'rb').read().strip()
-                script.append('adduser --gecos "%s" --disabled-password %s < /dev/null' % (user, user))
-                script.append('install -d -o %s -g %s -m 700  ~%s/.ssh' % (user, user, user))
-                script.append('echo "%s" > ~%s/.ssh/authorized_keys' % (pubkey, user))
-                script.append('chmod 600 ~%s/.ssh/authorized_keys' % (user,))
-                script.append('chown %s:%s ~%s/.ssh/authorized_keys' % (user, user, user))
-                for grp in auth_groups:
-                    script.append('adduser "%s" "%s"' % (user, grp))
-                script.append('')
+                pubkey = open(fn).read().strip()
+                script.append(mk_sshuser_script(user, auth_groups, pubkey))
             return '\n'.join(script)
 
         try:
