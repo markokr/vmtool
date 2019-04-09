@@ -1,4 +1,4 @@
-"""Tarball creaion with data filter.
+"""Tarball creation with data filter.
 """
 
 import sys

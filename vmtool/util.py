@@ -116,15 +116,19 @@ def ssh_add_known_host(kh_file, dns, ip, ktype, kval, vm_id, hash_hosts=True):
         if lines > 100:
             new_file = new_file[-20:]
 
-    # keys dont exist
-    if hash_hosts:
-        ipln = "%s %s %s %s\n" % (hash_known_host(dns), ktype, kval, vm_id)
-        dnsln = "%s %s %s %s\n" % (hash_known_host(ip), ktype, kval, vm_id)
-    else:
-        ipln = "%s %s %s %s\n" % (dns, ktype, kval, vm_id)
-        dnsln = "%s %s %s %s\n" % (ip, ktype, kval, vm_id)
-    new_file.append(ipln)
-    new_file.append(dnsln)
+    # keys don't exist
+    if dns:
+        if hash_hosts:
+            dnsln = "%s %s %s %s\n" % (hash_known_host(dns), ktype, kval, vm_id)
+        else:
+            dnsln = "%s %s %s %s\n" % (dns, ktype, kval, vm_id)
+        new_file.append(dnsln)
+    if ip:
+        if hash_hosts:
+            ipln = "%s %s %s %s\n" % (hash_known_host(ip), ktype, kval, vm_id)
+        else:
+            ipln = "%s %s %s %s\n" % (ip, ktype, kval, vm_id)
+        new_file.append(ipln)
 
     write_atomic(kh_file, ''.join(new_file))
 
@@ -262,7 +266,7 @@ def write_atomic(fn, data, bakext=None, mode='b'):
     f.write(as_bytes(data))
     f.close()
 
-    # link old data to bak file
+    # link old data to backup file
     if bakext:
         if bakext.find('/') >= 0:
             raise ValueError("invalid bakext")

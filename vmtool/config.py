@@ -241,8 +241,8 @@ def new_interpolate(cur_sect, cur_key, value, lookup_func):
     """Recursive interp
 
     >>> lookup = lambda s, x: '<'+x+'>'
-    >>> new_interpolate('sect', 'key', 'asd', lookup)
-    'asd'
+    >>> new_interpolate('sect', 'key', 'text', lookup)
+    'text'
     >>> new_interpolate('sect', 'key', 'foo.${baz}.com', lookup)
     'foo.<baz>.com'
     >>> new_interpolate('sect', 'key', 'foo.${baz.${goo}.zap}.com', lookup)

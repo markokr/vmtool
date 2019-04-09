@@ -7,7 +7,7 @@ extension-pkg-whitelist=
 
 # Add files or directories to the blacklist. They should be base names, not
 # paths.
-ignore=CVS
+ignore=CVS,tmp,dist
 
 # Add files or directories matching the regex patterns to the blacklist. The
 # regex matches against base names, not paths.
@@ -73,7 +73,6 @@ disable=bad-continuation,
 	no-else-raise,
 	no-else-return,
 	no-self-use,
-	too-many-public-methods,
 	trailing-newlines,
 	unused-argument,
 	unused-variable,
@@ -149,13 +148,13 @@ max-spelling-suggestions=4
 
 # Spelling dictionary name. Available dictionaries: none. To make it working
 # install python-enchant package..
-spelling-dict=
+#spelling-dict=en_US
 
 # List of comma separated words that should not be checked.
-spelling-ignore-words=
+spelling-ignore-words=usr,bin,env
 
 # A path to a file that contains private dictionary; one word per line.
-spelling-private-dict-file=
+spelling-private-dict-file=.local.dict
 
 # Tells whether to store unknown words to indicated private dictionary in
 # --spelling-private-dict-file option instead of raising a message.
@@ -456,7 +455,7 @@ max-locals=45
 max-parents=7
 
 # Maximum number of public methods for a class (see R0904).
-max-public-methods=20
+max-public-methods=420
 
 # Maximum number of return / yield for function / method body.
 max-returns=16
@@ -465,7 +464,7 @@ max-returns=16
 max-statements=150
 
 # Minimum number of public methods for a class (see R0903).
-min-public-methods=2
+min-public-methods=0
 
 
 [IMPORTS]

@@ -299,7 +299,7 @@ class VmTool(EnvScript):
         return self.get_boto3_client('ec2', region)
 
     def pager(self, client, method, rname):
-        """Create pager func for looping over long results.
+        """Create pager function for looping over long results.
         """
         lister = client.get_paginator(method)
 
