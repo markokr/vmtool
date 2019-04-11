@@ -19,6 +19,11 @@ def find_gittop():
                 return pos
         pos = os.path.normpath(os.path.join(pos, '..'))
 
+    pos = os.environ.get('VMTOOL_GIT_DIR', '')
+    if pos and os.path.isdir(os.path.join(pos, '.git')):
+        if os.path.isfile(os.path.join(pos, vmlib)):
+            return pos
+
     print("Need to be in repo that contains vmtool config")
     sys.exit(1)
 
