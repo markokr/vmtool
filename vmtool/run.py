@@ -56,7 +56,7 @@ def main():
                 cmd = a
                 cmdpos = i
         elif a[0] == '-':
-            args.insert(i, '--')
+            args.insert(cmdpos + 1, '--')
             break
 
     # load config
