@@ -65,7 +65,7 @@ SSH_CONFIG = [
 
 
 def show_commits(old_id, new_id, dirs, cwd):
-    cmd = ['git', 'shortlog', '--no-merges', old_id + '..' + new_id]
+    cmd = ['git', '--no-pager', 'shortlog', '--no-merges', old_id + '..' + new_id]
     if dirs:
         cmd.append('--')
         cmd.extend(dirs)
