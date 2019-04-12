@@ -332,15 +332,6 @@ class VmTool(EnvScript):
                 return v['VpcId']
         raise Exception("vpc not found: %r" % vpc_name)
 
-    def subnet_lookup(self, subnet_name):
-        client = self.get_ec2_client()
-        res = client.describe_subnets()
-        for s in res['Subnets']:
-            tags = self.load_tags(s)
-            if tags.get('Name') == subnet_name:
-                return s['SubnetId']
-        raise Exception("subnet not found: %r" % subnet_name)
-
     def sgroups_lookup(self, sgs_list):
         # manual lookup for sgs
         sg_ids = []
@@ -1724,12 +1715,7 @@ class VmTool(EnvScript):
         time_printf("Creating VM, storage: %s" % ', '.join(devlog))
 
         # optional: lookup subnet
-        subnet_id = self.cf.get('subnet_id', '')
-        if not subnet_id:
-            subnet_id = None
-            subnet_name = self.cf.get('subnet_name', '')
-            if subnet_name:
-                subnet_id = self.subnet_lookup(subnet_name)
+        subnet_id = self.get_subnet_id()
 
         # manual lookup for sgs
         sg_ids = self.sgroups_lookup(sg_list)
@@ -2139,6 +2125,8 @@ class VmTool(EnvScript):
         if self.options.verbose:
             printf("TF: %s", arg)
         val = tf_load_output_var(state_file, arg)
+        if isinstance(val, list):
+            return ', '.join(val)
         # work around tf dots in route53 data
         val = val.strip().rstrip('.')
         return val
@@ -2594,6 +2582,14 @@ class VmTool(EnvScript):
             DeviceIndex=1)
         printf("Attached ENI: %s", internal_eni)
 
+    def get_subnet_id(self):
+        """Pick subnet from list, predictibly.
+        """
+        subnet_ids = self.cf.getlist('subnet_id', [])
+        if subnet_ids:
+            return subnet_ids[0]
+        return None
+
     def raw_assign_vm_eip(self, vm_id, ip):
         time_printf("Associating address %s with %s", ip, vm_id)
         client = self.get_ec2_client()
@@ -2607,10 +2603,9 @@ class VmTool(EnvScript):
                 alloc_id = a.get('AllocationId')
                 break
 
-        subnet_name = self.cf.get('subnet_name', '')
-        subnet_id = self.cf.get('subnet_id', '')
+        subnet_id = self.get_subnet_id()
         args = dict(InstanceId=vm_id)
-        if subnet_name or subnet_id:
+        if subnet_id:
             args['AllocationId'] = alloc_id
             args['AllowReassociation'] = True
         else:
