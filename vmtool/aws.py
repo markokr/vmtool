@@ -146,6 +146,7 @@ class VmTool(EnvScript):
             'FILE': self.conf_func_file,
             'KEY': self.conf_func_key,
             'TF': self.conf_func_tf,
+            'TFAZ': self.conf_func_tfaz,
         })
         self.process_pkgs()
 
@@ -1714,8 +1715,8 @@ class VmTool(EnvScript):
 
         time_printf("Creating VM, storage: %s" % ', '.join(devlog))
 
-        # optional: lookup subnet
-        subnet_id = self.get_subnet_id()
+        # lookup subnet
+        subnet_id = self.cf.get('subnet_id')
 
         # manual lookup for sgs
         sg_ids = self.sgroups_lookup(sg_list)
@@ -1727,16 +1728,26 @@ class VmTool(EnvScript):
         if not instance_profile_arn:
             instance_profile_arn = None
 
+        instance_associate_public_ip = self.cf.getboolean('instance_associate_public_ip', False)
+
         user_data = self.gen_user_data()
 
+        main_iface = {
+            'DeviceIndex': 0,
+            'Description': '%s' % self.full_role,
+            'SubnetId': subnet_id,
+            'AssociatePublicIpAddress': instance_associate_public_ip,
+            'DeleteOnTermination': True,
+            'Groups': sg_ids,
+        }
         args = {
             'ImageId': image_id,
             'InstanceType': vm_type,
             'KeyName': key_name,
-            'SecurityGroupIds': sg_ids,
             'BlockDeviceMappings': bdm,
             'MinCount': 1,
             'MaxCount': 1,
+            'NetworkInterfaces': [main_iface]
         }
         if zone:
             args['Placement'] = {'AvailabilityZone': zone}
@@ -1744,8 +1755,6 @@ class VmTool(EnvScript):
             args['IamInstanceProfile'] = {'Arn': instance_profile_arn}
         if ebs_optimized:
             args['EbsOptimized'] = True
-        if subnet_id:
-            args['SubnetId'] = subnet_id
         if user_data:
             args['UserData'] = user_data
         if cpu_credits:
@@ -2126,10 +2135,24 @@ class VmTool(EnvScript):
             printf("TF: %s", arg)
         val = tf_load_output_var(state_file, arg)
         if isinstance(val, list):
-            return ', '.join(val)
+            raise UsageError("TF function got list param: %s" % kname)
         # work around tf dots in route53 data
         val = val.strip().rstrip('.')
         return val
+
+    def conf_func_tfaz(self, arg, sect, kname):
+        """Returns key from Terraform state file.
+
+        Usage: ${TFAZ ! tfvar}
+        """
+        state_file = self.cf.get('tf_state_file')
+        if self.options.verbose:
+            printf("TFAZ: %s", arg)
+        val = tf_load_output_var(state_file, arg)
+        if not isinstance(val, list):
+            raise UsageError("TFAZ function expects list param: %s" % kname)
+        # FIXME: proper multi-AZ support
+        return val[0]
 
     def cmd_prep(self, vm_id, xtype, *provider_ids):
         """Run prep.sh on vm.
@@ -2582,14 +2605,6 @@ class VmTool(EnvScript):
             DeviceIndex=1)
         printf("Attached ENI: %s", internal_eni)
 
-    def get_subnet_id(self):
-        """Pick subnet from list, predictibly.
-        """
-        subnet_ids = self.cf.getlist('subnet_id', [])
-        if subnet_ids:
-            return subnet_ids[0]
-        return None
-
     def raw_assign_vm_eip(self, vm_id, ip):
         time_printf("Associating address %s with %s", ip, vm_id)
         client = self.get_ec2_client()
@@ -2603,13 +2618,10 @@ class VmTool(EnvScript):
                 alloc_id = a.get('AllocationId')
                 break
 
-        subnet_id = self.get_subnet_id()
+        subnet_id = self.cf.get('subnet_id')
         args = dict(InstanceId=vm_id)
-        if subnet_id:
-            args['AllocationId'] = alloc_id
-            args['AllowReassociation'] = True
-        else:
-            args['PublicIp'] = ip
+        args['AllocationId'] = alloc_id
+        args['AllowReassociation'] = True
         client.associate_address(**args)
         self.wait_switch(vm_id, ip)
         time.sleep(10)
