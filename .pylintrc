@@ -76,6 +76,7 @@ disable=bad-continuation,
 	trailing-newlines,
 	unused-argument,
 	unused-variable,
+	using-constant-test,
 	useless-object-inheritance
 
 # Enable the message, report, category or checker with the given id(s). You can

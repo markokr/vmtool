@@ -2673,6 +2673,8 @@ class VmTool(EnvScript):
                 continue
 
             # check actual instance id
+            if True:
+                return
             cmd = ['wget', '-q', '-O-', 'http://169.254.169.254/latest/meta-data/instance-id']
             cur_id = self.vm_exec(vm_id, cmd, get_output=True, check_error=False)
             if cur_id == vm_id.encode('utf8'):
