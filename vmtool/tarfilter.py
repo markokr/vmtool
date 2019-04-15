@@ -5,6 +5,7 @@ import re
 import os
 import subprocess
 import binascii
+import ipaddress
 
 from vmtool.util import hmac_sha256, as_bytes
 from vmtool.tarball import TarBall
@@ -141,6 +142,12 @@ class TarFilter(TarBall):
             v = self.key_lookup(arg, fname).strip()
             vals = [e.strip() for e in v.split(',') if e.strip()]
             return ' '.join(vals)
+        elif kfunc == 'NETWORK':
+            v = self.key_lookup(arg, fname).strip()
+            return str(ipaddress.ip_network(v).network_address)
+        elif kfunc == 'NETMASK':
+            v = self.key_lookup(arg, fname).strip()
+            return str(ipaddress.ip_network(v).netmask)
         else:
             raise KeyError("%s: Unknown config op: %s" % (fname, kfunc))
 
