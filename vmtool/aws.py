@@ -3027,7 +3027,7 @@ class VmTool(EnvScript):
 
         vm = self.vm_lookup(vm_id)
         internal_ip = vm['PrivateIpAddress']
-        public_ip = vm['PublicIpAddress']
+        public_ip = vm.get('PublicIpAddress')
 
         # internal dns
         int_full_name = '%s.%s' % (local_name, zone_name)
@@ -3066,6 +3066,9 @@ class VmTool(EnvScript):
 
         # public dns
         if public_dns_full_name:
+            if not public_ip:
+                eprintf('request for public dns but vm does not have public ip: %r', vm_id)
+                sys.exit(1)
             changes = [{'Action': 'UPSERT',
                         'ResourceRecordSet': {
                             'Name': public_dns_full_name, 'Type': 'A', 'TTL': 60,
