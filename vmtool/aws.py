@@ -20,6 +20,7 @@ import ipaddress
 import datetime
 import errno
 import binascii
+import argparse
 
 from fnmatch import fnmatch
 
@@ -234,6 +235,8 @@ class VmTool(EnvScript):
         printf(doc)
 
     def init_argparse(self, parser=None):
+        if parser is None:
+            parser = argparse.ArgumentParser(prog='vmtool')
         p = super(VmTool, self).init_argparse(parser)
         #doc = self.__doc__.strip()
         #p.set_usage(doc)
