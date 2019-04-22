@@ -2435,20 +2435,18 @@ class VmTool(EnvScript):
                         data = f.read()
                         dst.add_file_data(fn, data, st.st_mode & stat.S_IRWXU, st.st_mtime)
 
+        # pass parameters to cert.ini files
+        defs = {'env_name': self.env_name}
+        if self.role_name:
+            defs['role_name'] = self.role_name
+        if self.cf.has_section('ca-config'):
+            items = self.cf.view_section('ca-config').items()
+            defs.update(items)
+
         # create keys & certs
         for cert_ini in cert_fns:
             printf("Processing certs: %s", cert_ini)
             mdir = os.path.dirname(cert_ini)
-            defs = {'env_name': self.env_name}
-            if self.role_name:
-                defs['role_name'] = self.role_name
-
-            internal_dns_vm_name = self.cf.get('internal_dns_vm_name', '')
-            if internal_dns_vm_name:
-                zone_name = self.cf.get('internal_dns_zone_name')
-                full_name = '%s.%s' % (internal_dns_vm_name, zone_name)
-                defs['internal_dns_name'] = full_name
-
             keys = load_cert_config(cert_ini, self.load_ca_keypair, defs)
             for kname in keys:
                 key, cert = keys[kname]
