@@ -9,6 +9,10 @@ top=$(dirname $(realpath $0))
 venv="$HOME/.vmtool-venv"
 ver="$venv/ver.txt"
 
+unset LC_ALL LC_TIME LC_MONETARY LC_ADDRESS LC_TELEPHONE LC_NAME
+unset LC_MEASUREMENT LC_IDENTIFICATION LC_NUMERIC LC_PAPER
+unset LANGUAGE LANG
+
 set -e
 
 refresh=1
