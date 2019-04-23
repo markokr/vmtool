@@ -2172,9 +2172,12 @@ class VmTool(EnvScript):
         # small pause
         time.sleep(15)
 
+        root_context = 'unset'
         if xtype == 'branch':
             if provider_ids:
                 root_id = provider_ids[0]
+                if len(provider_ids) > 1:
+                    root_context = provider_ids[1]
             else:
                 root_id = self.get_primary_vms()[0]
             self.load_branch_vars(root_id)
@@ -2183,7 +2186,7 @@ class VmTool(EnvScript):
 
         cmd = 'prep'
         #self.modcmd_init(cmd)
-        self.modcmd_prepare([vm_id], cmd, vmtype=xtype, root_id=root_id)
+        self.modcmd_prepare([vm_id], cmd, vmtype=xtype, root_id=root_id, root_context=root_context)
         self.modcmd_run(cmd)
 
     def load_vm_file(self, vm_id, fn):
@@ -2274,7 +2277,8 @@ class VmTool(EnvScript):
     def modcmd_prepare(self, args, cmd_name,
                        vmtype="unknown_type",
                        root_id='unknown_node',
-                       root_private_ip='unknown_ip'):
+                       root_private_ip='unknown_ip',
+                       root_context='unset'):
         """Prepare data package for command.
         """
         cmd_cf = self.cf.view_section('cmd.%s' % cmd_name)
@@ -2308,6 +2312,7 @@ class VmTool(EnvScript):
             'stamp_dirs': stamp_dirs,
             'stamp': self.get_stamp(),
             'use_admin': use_admin,
+            'root_context': root_context,
             'args': xargs
         }
 
@@ -2322,6 +2327,7 @@ class VmTool(EnvScript):
             if not data_info:
                 data_info = 1
             self.run_mod_data(data, vm_id, info['vmtype'], info['root_id'], info['root_private_ip'],
+                              xargs = [info['root_context']],
                               use_admin=info['use_admin'])
             if info['cmd_abbr']:
                 self.set_stamp(vm_id, info['cmd_abbr'], info['stamp'], *info['stamp_dirs'])
@@ -2794,7 +2800,6 @@ class VmTool(EnvScript):
         """
         vm_id = self.cmd_create_branch()
         old_root = self.cmd_takeover(vm_id)
-        #self.vm_exec(vm_id, ["sudo", "-nH", "/etc/init.d/skytools3", "restart"])
 
         if self.new_commit and self.old_commit:
             show_commits(self.old_commit, self.new_commit, [], self.git_dir)
