@@ -120,6 +120,8 @@ class VmTool(EnvScript):
 
         # ~/.vmtool
         ssh_dir = os.path.expanduser('~/.vmtool')
+        if not os.path.isdir(ssh_dir):
+            os.mkdir(ssh_dir, stat.S_IRWXU)
 
         keys_dir = os.environ.get('VMTOOL_KEY_DIR',  os.path.join(self.git_dir, 'keys'))
         if not keys_dir or not os.path.isdir(keys_dir):
