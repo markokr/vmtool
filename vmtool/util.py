@@ -108,7 +108,7 @@ def ssh_add_known_host(kh_file, dns, ip, ktype, kval, vm_id, hash_hosts=True):
                         continue  # drop
             new_file.append(ln)
 
-        if found_dns and found_ip and not drops:
+        if (not dns or found_dns) and (not ip or found_ip) and not drops:
             # keys already exist
             return
 

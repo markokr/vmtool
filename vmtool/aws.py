@@ -721,19 +721,18 @@ class VmTool(EnvScript):
         """
         vm = self.vm_lookup(vm_id)
         iplist = []
-        for iface in vm['NetworkInterfaces']:
-            assoc = iface.get('Association')
-            if assoc:
-                ip = assoc['PublicIp']
-                dns = assoc['PublicDnsName']
-                if ip:
-                    iplist.append((ip, dns))
-        ip = vm.get('PublicIpAddress')
-        if ip and ip not in iplist:
-            dns = vm.get('PublicDnsName')
-            iplist.append((ip, dns))
-
-        #public_dns_name = vm.get('PublicDnsName')
+        if self.cf.getboolean('ssh_internal_ip_works', False):
+            iplist.append(vm['PrivateIpAddress'])
+        else:
+            for iface in vm['NetworkInterfaces']:
+                assoc = iface.get('Association')
+                if assoc:
+                    ip = assoc['PublicIp']
+                    if ip:
+                        iplist.append(ip)
+            ip = vm.get('PublicIpAddress')
+            if ip and ip not in iplist:
+                iplist.append(ip)
 
         old_keys = []
         new_keys = []
@@ -747,8 +746,9 @@ class VmTool(EnvScript):
 
         if new_keys:
             old_keys = []
+        dns = None
         for k, v in old_keys + new_keys:
-            for ip, dns in iplist:
+            for ip in iplist:
                 ssh_add_known_host(self.ssh_known_hosts, dns, ip, k, v, vm_id)
 
     def get_env_filters(self):
