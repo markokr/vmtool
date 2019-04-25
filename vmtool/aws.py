@@ -2086,8 +2086,7 @@ class VmTool(EnvScript):
     def make_filter(self, vm_id, vmtype, extra_defs=None):
         # env description
         defs = {
-            'INSTANCE_NAME': vm_id,
-            'ENV_NAME': self.env_name,
+            'INSTANCE_ID': vm_id,
             'VMTYPE': vmtype,
         }
         if extra_defs:
