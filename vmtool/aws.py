@@ -1851,8 +1851,8 @@ class VmTool(EnvScript):
         self._vm_map = {}
         return ids
 
-    def cmd_create_root(self):
-        """Create new root VM.
+    def cmd_create_primary(self):
+        """Create primary VM.
 
         Group: vm
         """
@@ -1877,8 +1877,8 @@ class VmTool(EnvScript):
 
         return first
 
-    def cmd_create_branch(self, *provider_ids):
-        """Create non-root VM attached to existing root.
+    def cmd_create_secondary(self, *provider_ids):
+        """Create secondary.
 
         Group: vm
         """
@@ -2799,7 +2799,7 @@ class VmTool(EnvScript):
 
         Group: vm
         """
-        vm_id = self.cmd_create_branch()
+        vm_id = self.cmd_create_secondary()
         old_root = self.cmd_takeover(vm_id)
 
         if self.new_commit and self.old_commit:
@@ -2895,7 +2895,7 @@ class VmTool(EnvScript):
         if image_id:
             raise UsageError("Image with this name already exists")
 
-        vm_id = self.cmd_create_root()
+        vm_id = self.cmd_create_primary()
         self.cmd_stop(vm_id)
 
         wait = True
