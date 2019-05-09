@@ -1,11 +1,13 @@
 """TarBall that filters input data.
 """
 
+import sys
 import re
 import os
 import subprocess
 import binascii
 import ipaddress
+import logging
 
 from vmtool.util import hmac_sha256, as_bytes
 from vmtool.tarball import TarBall
@@ -81,7 +83,11 @@ class TarFilter(TarBall):
             res.append(data[pos:p1])
             pos = m.end()
             k = m.group(1).strip()
-            v = self.key_lookup(k, fname)
+            try:
+                v = self.key_lookup(k, fname)
+            except:
+                logging.exception("%s: %s", fname, k)
+                sys.exit(1)
             res.append(as_bytes(v))
 
         res.append(data[pos:])
