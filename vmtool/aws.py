@@ -2501,7 +2501,7 @@ class VmTool(EnvScript):
         tmp_uuid = str(uuid.uuid4())
 
         time_printf("%s: Sending data - %d bytes", vm_id, len(data))
-        decomp_script = 'mkdir -p "tmp/%s" && tar xzf - --warning=no-timestamp -C "tmp/%s"' % (tmp_uuid, tmp_uuid)
+        decomp_script = 'install -d -m 711 tmp && mkdir -p "tmp/%s" && tar xzf - --warning=no-timestamp -C "tmp/%s"' % (tmp_uuid, tmp_uuid)
         self.vm_exec(vm_id, ["/bin/sh", "-c", decomp_script, 'decomp'], data, use_admin=use_admin)
 
         time_printf("%s: Running", vm_id)
