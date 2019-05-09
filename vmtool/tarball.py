@@ -23,7 +23,7 @@ TAR_EXEC_MODE = TAR_DIR_MODE
 class TarBall(object):
     def __init__(self):
         self.buf = io.BytesIO()
-        self.tf = tarfile.open('buf.tgz', 'w|gz', self.buf)
+        self.tf = tarfile.open('buf.tgz', 'w|gz', self.buf, format=tarfile.PAX_FORMAT)
 
     def filter_data(self, fname, data):
         """Overridable function."""
