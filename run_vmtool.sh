@@ -26,6 +26,7 @@ fi
 if test "$refresh" = "1"; then
   rm -rf "$venv"
   $PYTHON -m virtualenv -p "$PYTHON" "$venv"
+  echo $top
   "$venv"/bin/pip install -r "$top/requirements.txt"
   echo "$CURVER" > "$ver"
 fi

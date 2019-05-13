@@ -175,17 +175,7 @@ class EnvScript(object):
             sys.exit(1)
         fn = getattr(self, fname)
 
-        # check if correct number of arguments
-        (args, varargs, varkw, defaults, kwonlyargs, kwonlydefaults, annotations) = inspect.getfullargspec(fn)
-        n_args = len(args) - 1   # drop 'self'
-        if varargs is None and n_args != len(cmdargs):
-            helpstr = ""
-            if n_args:
-                helpstr = ": " + " ".join(args[1:])
-            self.log.error("command '%s' got %d args, but expects %d%s",
-                           cmd, len(cmdargs), n_args, helpstr)
-            sys.exit(1)
+        b = inspect.signature(fn).bind(*cmdargs)
+        print('ARGS: %s' % b.arguments)
 
-        # run command
-        fn(*cmdargs)
-
+        fn(*b.args, **b.kwargs)

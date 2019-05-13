@@ -14,7 +14,7 @@ from vmtool.envconfig import load_env, load_env_config
 def run_command(cf, args):
     mod_name = cf.get('vmtool_profile')
     mod = importlib.import_module(mod_name)
-
+    print('MOD: %s - %s' % (mod, mod_name))
     script = mod.VmTool('vmtool', args)
     script.start()
     sys.stdout.flush()
@@ -46,7 +46,7 @@ def run_alias(env_name, alias, cmd, cmdpos, args, options):
 
 def main():
     args = sys.argv[1:]
-
+    print('ARGS: %s' % args)
     # parse command
     cmd = None
     cmdpos = None
