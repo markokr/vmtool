@@ -7,6 +7,7 @@
 
 import sys
 import importlib
+import shlex
 
 from vmtool.envconfig import load_env, load_env_config
 
@@ -22,15 +23,17 @@ def run_command(cf, args):
 
 
 def run_alias(env_name, alias, cmd, cmdpos, args, options):
+    cmd_prefix = args[:cmdpos]
+    cmd_self = args[cmdpos:cmdpos+1]
+    cmd_suffix = args[cmdpos+1:]
     for role in alias.split(','):
         role = role.strip()
-        xargs = args[:]
-        xcmd = cmd
+        xcmd = cmd_self
         if ':' in role:
-            role, xcmd = role.split(':')
-            role, xcmd = role.strip(), xcmd.strip()
-            xargs[cmdpos] = xcmd
-        xargs = ['--role=' + role] + xargs
+            role, acmd = role.split(':', 1)
+            role, acmd = role.strip(), acmd.strip()
+            xcmd = shlex.split(acmd)
+        xargs = ['--role=' + role] + cmd_prefix + xcmd + cmd_suffix
 
         extra = ''
         if options:
