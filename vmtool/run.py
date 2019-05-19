@@ -72,7 +72,7 @@ def main():
         alias = cf.cf.get(alias_sect, 'roles')
         options = []
         if cf.cf.has_option(alias_sect, 'options'):
-            options = cf.cf.get(alias_sect, 'options').split()
+            options = shlex.split(cf.cf.get(alias_sect, 'options'))
         run_alias(env_name, alias, cmd, cmdpos, args, options)
     else:
         run_command(cf, args)
