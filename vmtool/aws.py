@@ -1,6 +1,7 @@
 """AWS backend for vmtool.
 """
 
+import pprint
 import enum
 import typing
 import sys
@@ -90,24 +91,24 @@ done
 def mk_sshuser_script(user, auth_groups, pubkey):
     return SSH_USER_CREATION.format(user=user, auth_groups=' '.join(auth_groups), pubkey=pubkey)
 
-class VmCmd(enum.Enum):
+class VmCmd:
     """Commands defined in vmtool. More commands may come from cf.
     """
     PREP: str = 'prep'
     FAILOVER_PROMOTE_SECONDARY: str = 'failover_promote_secondary'
 
-    TAKEOVER_PREPARE_PRIMARY: str = 'takeover_prepare_primary'
+    TAKEOVER_PREPARE_PROVIDER: str = 'takeover_prepare_provider'
     TAKEOVER_PREPARE_SECONDARY: str = 'takeover_prepare_secondary'
     TAKEOVER_FINISH_PRIMARY:str = 'takeover_finish_primary'
     TAKEOVER_FINISH_SECONDARY:str  = 'takeover_finish_secondary'
 
-class NodeType(enum.Enum):
+class NodeType:
 
     ROOT: str = 'root'
     LEAF: str = 'leaf'
     BRANCH: str = 'branch'
 
-class VmState(enum.Enum):
+class VmState:
 
     PRIMARY: str = 'primary'
     SECONDARY: str = 'secondary'
@@ -879,6 +880,26 @@ class VmTool(EnvScript):
             raise UsageError("Dead Primary VM not found")
         eprintf("Dead Primary VM for %s is %s", self.full_role, ','.join(main_vms))
         return main_vms
+
+    def get_provider_vm(self, role_name, instance_id=None):
+        filters = self.make_env_filters(role_name)
+        dns_map = self.get_dns_map(True)
+        pprint.pprint(dns_map)
+        for vm in self.ec2_iter_instances(Filters=filters):
+            if not self._check_tags(vm.get('Tags'), role_name=role_name, force_role=True):
+                continue
+            if vm['State']['Name'] != 'running':
+                continue
+            #  ignore IP checks if instance_id is manually provided
+            if instance_id is not None:
+                if vm['InstanceId'] == instance_id:
+                    return vm
+            elif vm.get('PrivateIpAddress') in dns_map:
+                return vm
+            #elif vm.get('PublicIpAddress') in dns_map:
+            #    return vm
+
+        raise UsageError("VM not found")
 
     def get_primary_vms(self):
         ec2 = self.get_ec2_client()
@@ -1905,23 +1926,25 @@ class VmTool(EnvScript):
         if running_vms:
             raise UsageError('Env has running vms. Please stop them before create-primary.')
 
-        provider_role = self.cf.view_section('vm-config').get('provider_role')
+        provider_role = self.cf.get('primary_provider_role')
         if not provider_role:
             raise ValueError('Invalid provider role: %s' % provider_role)
 
-        provider_vms = self.get_running_vms(provider_role)
-        if not provider_vms:
-            raise UsageError('Env has no running provider vms.')
-
+        magic_roles = self.cf.getlist('magic_roles', default=[])
+        if provider_role in magic_roles:
+            provider_vm = None
+        else:
+            provider_vm = self.get_provider_vm(provider_role, provider_id)
         self.modcmd_init(VmCmd.PREP)
 
         start = time.time()
         ids = self.cmd_create()
+
         first = None
         for vm_id in ids:
             if not first:
                 first = vm_id
-            self.do_prep(vm_id, VmState.PRIMARY)
+            self.do_prep(vm_id, VmState.PRIMARY, provider_vm)
 
         self.assign_vm(first, True)
 
@@ -1939,8 +1962,16 @@ class VmTool(EnvScript):
 
         Group: vm
         """
-        print(self.cf.sections())
-        return
+        provider_role = self.cf.view_section('vm-config').get('secondary_provider_role')
+        if not provider_role:
+            raise ValueError('Invalid provider role: %s' % provider_role)
+
+        magic_roles = self.cf.getlist('magic_roles', default=[])
+        if provider_role in magic_roles:
+            provider_vm = None
+        else:
+            provider_vm = self.get_provider_vm(provider_role, provider_id)
+
         start = time.time()
 
         self.modcmd_init(VmCmd.PREP)
@@ -1950,7 +1981,7 @@ class VmTool(EnvScript):
         for vm_id in ids:
             if not first:
                 first = vm_id
-            self.do_prep(vm_id, VmState.SECONDARY, provider_id)
+            self.do_prep(vm_id, VmState.SECONDARY, provider_vm)
 
         end = time.time()
         printf("VM ID: %s", ", ".join(ids))
@@ -2225,28 +2256,21 @@ class VmTool(EnvScript):
         self.modcmd_init(VmCmd.PREP)
         self.do_prep(vm_id, vm_state, *provider_ids)
 
-    def do_prep(self, vm_id, vm_state: VmState, *provider_ids):
+    def do_prep(self, vm_id: str, vm_state: VmState, provider_vm: dict):
         """Do 'prep' command without init.
         """
-
-        # small pause
+        # pause for a moment
         time.sleep(15)
 
-        primary_context = 'unset'
-        if vm_state == VmState.SECONDARY:
-            if provider_ids:
-                primary_id = provider_ids[0]
-                if len(provider_ids) > 1:
-                    primary_context = provider_ids[1]
-            else:
-                primary_id = self.get_primary_vms()[0]
-            self.load_secondary_vars(primary_id)
+        if vm_state == VmState.PRIMARY:
+            pass
+        elif vm_state == VmState.SECONDARY:
+            pass
         else:
-            primary_id = 'node_irrelevant'
+            raise ValueError('Invalid value for vm_state="%s"' % vm_state)
 
         cmd = VmCmd.PREP
-        #self.modcmd_init(cmd)
-        self.modcmd_prepare([vm_id], cmd, vm_state=vm_state, primary_id=primary_id, primary_context=primary_context)
+        self.modcmd_prepare([vm_id], cmd, vm_state=vm_state, provider_vm=provider_vm)
         self.modcmd_run(cmd)
 
     def load_vm_file(self, vm_id, fn):
@@ -2336,9 +2360,9 @@ class VmTool(EnvScript):
 
     def modcmd_prepare(self, args, cmd_name: VmCmd,
                        vm_state: VmState = VmState.UNKNOWN,
-                       primary_id='unknown_node',
-                       primary_private_ip='unknown_ip',
-                       primary_context='unset'):
+                       provider_vm: dict = None,
+                       primary_vm: dict = None,
+                       secondary_vm: dict = None):
         """Prepare data package for command.
         """
         cmd_cf = self.cf.view_section('cmd.%s' % cmd_name)
@@ -2346,7 +2370,6 @@ class VmTool(EnvScript):
         cmd_abbr = cmd_cf.get('command_tag', '')
         globs = cmd_cf.getlist('files', [])
         use_admin = cmd_cf.getboolean('use_admin', False)
-
         ids = []
         xargs = []
 
@@ -2363,31 +2386,46 @@ class VmTool(EnvScript):
         for vm_id in ids:
             self.newcmd_prepare_vm(cmd_name, vm_id, vm_state, globs, cmd_cf)
 
+        provider_id = '<null>'
+        if provider_vm:
+            provider_id = provider_vm['InstanceId']
+
+        primary_id = '<null>'
+        if primary_vm:
+            primary_id = primary_vm['InstanceId']
+
+        secondary_id = '<null>'
+        if secondary_vm:
+            secondary_id = secondary_vm['InstanceId']
+
         self._PREP_STAMP_CACHE[cmd_name] = {
-            'vm_state': vm_state,
+            'ids': ids,                   #  main instances where scripts are run
+            'vm_state': vm_state,         #  main instance state
+
+            'provider_id': provider_id,
+
             'primary_id': primary_id,
-            'primary_private_ip': primary_private_ip,
-            'ids': ids,
+
+            'secondary_id': secondary_id,
+
             'cmd_abbr': cmd_abbr,
             'stamp_dirs': stamp_dirs,
             'stamp': self.get_stamp(),
             'use_admin': use_admin,
-            'primary_context': primary_context,
-            'args': xargs
         }
 
     def modcmd_run(self, cmd_name):
         """Send mod data to server and run it.
         """
         info = self._PREP_STAMP_CACHE[cmd_name]
-
         data_info = 0
         for vm_id in info['ids']:
             data = self._PREP_TGZ_CACHE[cmd_name][vm_id]
             if not data_info:
                 data_info = 1
-            self.run_mod_data(data, vm_id, info['vm_state'], info['primary_id'], info['primary_private_ip'],
-                              xargs = [info['primary_context']],
+            print('RUNNING...')
+            self.run_mod_data(data, vm_id, info['vm_state'],
+                              info['provider_id'], info['primary_id'], info['secondary_id'],
                               use_admin=info['use_admin'])
             if info['cmd_abbr']:
                 self.set_stamp(vm_id, info['cmd_abbr'], info['stamp'], *info['stamp_dirs'])
@@ -2545,7 +2583,7 @@ class VmTool(EnvScript):
             raise UsageError("CA key not found: %s" % last_key)
         return (last_key, last_crt)
 
-    def run_mod_data(self, data, vm_id, vm_state: VmState, primary_id, primary_private_ip='some_ip', xargs=(), use_admin=False):
+    def run_mod_data(self, data, vm_id, vm_state: VmState, provider_id='<null>', primary_id='<null>', secondary_id='<null>', use_admin=False):
 
         run_user = 'root'
 
@@ -2555,10 +2593,9 @@ class VmTool(EnvScript):
             launcher = 'sudo -nH -u %s %s' % (run_user, launcher)
             rm_cmd = 'sudo -nH ' + rm_cmd
 
-        args = [vm_id, primary_id, vm_state, primary_private_ip]
-        args.extend(xargs)
-        tmp_uuid = str(uuid.uuid4())
+        args = [vm_id, vm_state, provider_id, primary_id, secondary_id]
 
+        tmp_uuid = str(uuid.uuid4())
         time_printf("%s: Sending data - %d bytes", vm_id, len(data))
         decomp_script = 'install -d -m 711 tmp && mkdir -p "tmp/%s" && tar xzf - --warning=no-timestamp -C "tmp/%s"' % (tmp_uuid, tmp_uuid)
         self.vm_exec(vm_id, ["/bin/sh", "-c", decomp_script, 'decomp'], data, use_admin=use_admin)
@@ -2788,71 +2825,77 @@ class VmTool(EnvScript):
 
         return secondary_id
 
-    def cmd_takeover(self, secondary_id, *primary_ids):
+    def cmd_takeover(self, secondary_id):
         """Switch primary to another node.
 
         Group: vm
         """
         self.change_cwd_adv()
 
-        if primary_ids:
-            primary_id = primary_ids[0]
-        else:
-            primary_id = self.get_primary_vms()[0]
-
-        if primary_id == secondary_id:
-            raise UsageError("%s is already primary" % secondary_id)
-
-        primary_vm = self.vm_lookup(primary_id)
-        primary_tags = self.load_tags(primary_vm)
-        primary_private_ip = primary_vm['PrivateIpAddress']
-
-        self.old_commit = primary_tags.get('Commit', '')
-        if self.old_commit.find(':') > 0:
-            self.old_commit = self.old_commit.split(':')[1]
-
         # make sure it exists
         self.vm_lookup(secondary_id)
 
-        cmd = VmCmd.TAKEOVER1_PREPARE_PRIMARY
+        #  PRIMARY
+        primary_role = self.cf.view_section('vm-config').get('secondary_provider_role')
+        primary_vm = self.get_provider_vm(primary_role)
+
+        primary_id = primary_vm['InstanceId']
+        if primary_id == secondary_id:
+            raise UsageError("%s is already primary" % secondary_id)
+
+        #  PROVIDER
+        provider_role = self.cf.view_section('vm-config').get('primary_provider_role')
+
+        magic_roles = self.cf.getlist('magic_roles', default=[])
+        if provider_role in magic_roles:
+            provider_vm = None
+            provider_id = None
+        else:
+            provider_vm = self.get_provider_vm(provider_role)
+            provider_id = provider_vm['InstanceId']
+
+            provider_tags = self.load_tags(provider_vm)
+            self.old_commit = provider_tags.get('Commit', '')
+            if self.old_commit.find(':') > 0:
+                self.old_commit = self.old_commit.split(':')[1]
+
+        #  UNUSED
+        cmd = VmCmd.TAKEOVER_PREPARE_PROVIDER
         if self.has_modcmd(cmd):
             self.modcmd_init(cmd)
-            self.modcmd_prepare([primary_id], cmd,
+            self.modcmd_prepare([provider_id], cmd,
                                 vm_state=VmState.SECONDARY,
-                                primary_id=primary_id,
-                                primary_private_ip=primary_private_ip)
+                                provider_vm=provider_vm)
             self.modcmd_run(cmd)
 
-        cmd = VmCmd.TAKEOVER1_PREPARE_SECONDARY
+        #  UNUSED
+        cmd = VmCmd.TAKEOVER_PREPARE_SECONDARY
         if self.has_modcmd(cmd):
             self.modcmd_init(cmd)
             self.modcmd_prepare([secondary_id], cmd,
                                 vm_state=VmState.PRIMARY,
-                                primary_id=primary_id,
-                                primary_private_ip=primary_private_ip)
+                                provider_vm=provider_vm)
             self.modcmd_run(cmd)
 
-        cmd = VmCmd.TAKEOVER2_FINISH_PRIMARY
+        cmd = VmCmd.TAKEOVER_FINISH_PRIMARY
         if self.has_modcmd(cmd):
             self.modcmd_init(cmd)
             self.modcmd_prepare([primary_id], cmd,
-                                vm_state=VmState.SECONDARY,
-                                primary_id=primary_id,
-                                primary_private_ip=primary_private_ip)
+                                vm_state=VmState.SECONDARY)
             self.modcmd_run(cmd)
 
-        cmd = VmCmd.TAKEOVER2_FINISH_SECONDARY
+        cmd = VmCmd.TAKEOVER_FINISH_SECONDARY
         if self.has_modcmd(cmd):
             self.modcmd_init(cmd)
             self.modcmd_prepare([secondary_id], cmd,
                                 vm_state=VmState.PRIMARY,
-                                primary_id=primary_id,
-                                primary_private_ip=primary_private_ip)
+                                provider_vm=provider_vm,
+                                primary_vm=primary_vm)
             self.modcmd_run(cmd)
 
         self.raw_assign_vm(secondary_id)
 
-        return primary_id
+        return provider_id
 
     def cmd_full_upgrade(self):
         """Replace node, stop old one

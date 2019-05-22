@@ -176,6 +176,5 @@ class EnvScript(object):
         fn = getattr(self, fname)
 
         b = inspect.signature(fn).bind(*cmdargs)
-        print('ARGS: %s' % b.arguments)
 
         fn(*b.args, **b.kwargs)
