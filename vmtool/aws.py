@@ -1931,13 +1931,14 @@ class VmTool(EnvScript):
             raise ValueError('Invalid provider role: %s' % provider_role)
 
         magic_roles = self.cf.getlist('magic_roles', default=[])
-        skip_vm_lookup = self.cf.getboolean('skip_vm_lookup', default=True)
+        do_vm_lookup = self.cf.getboolean('do_vm_lookup', default=False)
         if provider_role in magic_roles:
             provider_vm = None
-        elif skip_vm_lookup:
-            provider_vm = None
-        else:
+        elif do_vm_lookup:
             provider_vm = self.get_provider_vm(provider_role, provider_id)
+        else:
+            provider_vm = None
+
         self.modcmd_init(VmCmd.PREP)
 
         start = time.time()
@@ -1970,13 +1971,14 @@ class VmTool(EnvScript):
             raise ValueError('Invalid provider role: %s' % provider_role)
 
         magic_roles = self.cf.getlist('magic_roles', default=[])
-        skip_vm_lookup = self.cf.getboolean('skip_vm_lookup', default=True)
+        do_vm_lookup = self.cf.getboolean('do_vm_lookup', default=False)
+
         if provider_role in magic_roles:
             provider_vm = None
-        elif skip_vm_lookup:
-            provider_vm = None
-        else:
+        elif do_vm_lookup:
             provider_vm = self.get_provider_vm(provider_role, provider_id)
+        else:
+            provider_vm = None
 
         start = time.time()
 
