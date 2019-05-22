@@ -2613,7 +2613,10 @@ class VmTool(EnvScript):
         client = self.get_ec2_client()
         res = client.get_console_output(InstanceId=vm_id)
         if res.get('Output'):
-            print(res['Output'])
+            # py3 still manages to organize codec=ascii errors
+            f = os.fdopen(sys.stdout.fileno(), 'wb', buffering=0)
+            v = res['Output'].encode('utf8', 'replace')
+            f.write(v)
 
     def cmd_show_primary(self):
         """Show primary VM id.
