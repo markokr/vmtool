@@ -2206,7 +2206,7 @@ class VmTool(EnvScript):
         if not os.path.isfile(fn):
             raise UsageError('%s - FILE missing: %s' % (kname, arg))
         if fn.endswith('.gpg'):
-            return self.load_gpg_file(fn)
+            return self.load_gpg_file(fn).rstrip('\n')
         return open(fn, 'r').read().rstrip('\n')
 
     def conf_func_key(self, arg, sect, kname):
