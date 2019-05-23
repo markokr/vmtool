@@ -885,7 +885,6 @@ class VmTool(EnvScript):
     def get_provider_vm(self, role_name, instance_id=None):
         filters = self.make_env_filters(role_name)
         dns_map = self.get_dns_map(True)
-        pprint.pprint(dns_map)
         for vm in self.ec2_iter_instances(Filters=filters):
             if not self._check_tags(vm.get('Tags'), role_name=role_name, force_role=True):
                 continue
@@ -1932,12 +1931,6 @@ class VmTool(EnvScript):
 
         start = time.time()
 
-        #archiveq_provider_id = self.cf.get('archiveq_provider_id')
-        #print(archiveq_provider_id)
-
-        recentq_provider_id = self.cf.get('recentq_provider_id')
-        print(recentq_provider_id)
-
         ids = self.cmd_create()
 
         first = None
@@ -1954,10 +1947,11 @@ class VmTool(EnvScript):
 
         return first
 
-    def cmd_create_secondary(self, provider_id: typing.Optional[str]=None):
+    def cmd_create_secondary(self):
         """Create secondary vm.
         Group: vm
         """
+        self.cf.set('vm_state', VmState.SECONDARY)
         start = time.time()
 
         self.modcmd_init(VmCmd.PREP)
@@ -1967,7 +1961,7 @@ class VmTool(EnvScript):
         for vm_id in ids:
             if not first:
                 first = vm_id
-            self.do_prep(vm_id, VmState.SECONDARY, provider_vm)
+            self.do_prep(vm_id)
 
         end = time.time()
         printf("VM ID: %s", ", ".join(ids))
