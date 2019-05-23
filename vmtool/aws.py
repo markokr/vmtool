@@ -90,7 +90,7 @@ def mk_sshuser_script(user, auth_groups, pubkey):
 
 
 class VmCmd:
-    """Commands defined in vmtool. More commands may come from cf.
+    """Sub-command names used internally in vmtool.
     """
     PREP: str = 'prep'
     FAILOVER_PROMOTE_SECONDARY: str = 'failover_promote_secondary'
@@ -874,7 +874,7 @@ class VmTool(EnvScript):
         eprintf("Dead Primary VM for %s is %s", self.full_role, ','.join(main_vms))
         return main_vms
 
-    def get_provider_vm(self, role_name, instance_id=None):
+    def get_primary_for_role(self, role_name, instance_id=None):
         filters = self.make_env_filters(role_name)
         dns_map = self.get_dns_map(True)
         for vm in self.ec2_iter_instances(Filters=filters):
@@ -2218,10 +2218,9 @@ class VmTool(EnvScript):
     def conf_func_primary_vm(self, arg, sect, kname):
         """Lookup primary vm.
 
-        Usage: ${PRIMARY_VM ! {{primary_provider_role}}}
+        Usage: ${PRIMARY_VM ! ${other_role}}
         """
-        print('PRIMARY_VM_ARG: %s' % arg)
-        vm = self.get_provider_vm(arg)
+        vm = self.get_primary_for_role(arg)
         return vm['InstanceId']
 
     def do_prep(self, vm_id: str):
