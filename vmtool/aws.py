@@ -88,28 +88,23 @@ done
 def mk_sshuser_script(user, auth_groups, pubkey):
     return SSH_USER_CREATION.format(user=user, auth_groups=' '.join(auth_groups), pubkey=pubkey)
 
+
 class VmCmd:
     """Commands defined in vmtool. More commands may come from cf.
     """
     PREP: str = 'prep'
     FAILOVER_PROMOTE_SECONDARY: str = 'failover_promote_secondary'
 
-    TAKEOVER_PREPARE_PROVIDER: str = 'takeover_prepare_provider'
+    TAKEOVER_PREPARE_PRIMARY: str = 'takeover_prepare_primary'
     TAKEOVER_PREPARE_SECONDARY: str = 'takeover_prepare_secondary'
     TAKEOVER_FINISH_PRIMARY:str = 'takeover_finish_primary'
     TAKEOVER_FINISH_SECONDARY:str  = 'takeover_finish_secondary'
 
-class NodeType:
-
-    ROOT: str = 'root'
-    LEAF: str = 'leaf'
-    BRANCH: str = 'branch'
 
 class VmState:
-
     PRIMARY: str = 'primary'
     SECONDARY: str = 'secondary'
-    UNKNOWN: str = 'unknown'
+
 
 class VmTool(EnvScript):
     __doc__ = __doc__
@@ -2756,34 +2751,27 @@ class VmTool(EnvScript):
         """
         self.change_cwd_adv()
 
-        #self.resolve()
-
         # make sure it exists
         self.vm_lookup(secondary_id)
 
-        #  PRIMARY
-        primary_role = self.cf.view_section('vm-config').get('secondary_provider_role')
-        primary_vm = self.get_provider_vm(primary_role)
+        vm_ids = self.get_primary_vms()
+        if not vm_ids:
+            raise UsageError("No primary VM found")
+        if len(vm_ids) > 1:
+            raise UsageError("Too many primaries")
 
-        primary_id = primary_vm['InstanceId']
-        if primary_id == secondary_id:
-            raise UsageError("%s is already primary" % secondary_id)
+        # old primary
+        primary_id = vm_ids[0]
 
-        #  PROVIDER
-        provider_role = self.cf.view_section('vm-config').get('primary_provider_role')
+        cmd = VmCmd.TAKEOVER_PREPARE_PRIMARY
+        if self.has_modcmd(cmd):
+            self.modcmd_init(cmd)
+            self.modcmd_run(cmd, [primary_id])
 
-        magic_roles = self.cf.getlist('magic_roles', default=[])
-        if provider_role in magic_roles:
-            provider_vm = None
-            provider_id = None
-        else:
-            provider_vm = self.get_provider_vm(provider_role)
-            provider_id = provider_vm['InstanceId']
-
-            provider_tags = self.load_tags(provider_vm)
-            self.old_commit = provider_tags.get('Commit', '')
-            if self.old_commit.find(':') > 0:
-                self.old_commit = self.old_commit.split(':')[1]
+        cmd = VmCmd.TAKEOVER_PREPARE_SECONDARY
+        if self.has_modcmd(cmd):
+            self.modcmd_init(cmd)
+            self.modcmd_run(cmd, [secondary_id])
 
         cmd = VmCmd.TAKEOVER_FINISH_PRIMARY
         if self.has_modcmd(cmd):
@@ -2796,8 +2784,7 @@ class VmTool(EnvScript):
             self.modcmd_run(cmd, [secondary_id])
 
         self.raw_assign_vm(secondary_id)
-
-        return provider_id
+        return primary_id
 
     def cmd_full_upgrade(self):
         """Replace node, stop old one
