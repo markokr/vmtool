@@ -175,6 +175,7 @@ class VmTool(EnvScript):
             'KEY': self.conf_func_key,
             'TF': self.conf_func_tf,
             'TFAZ': self.conf_func_tfaz,
+            'PRIMARY_VM': self.conf_func_primary_vm,
         })
         self.process_pkgs()
 
@@ -1918,37 +1919,32 @@ class VmTool(EnvScript):
         self._vm_map = {}
         return ids
 
-    def cmd_create_primary(self, provider_id: typing.Optional[str]=None):
+    def cmd_create_primary(self):
         """Create primary VM.
         Group: vm
         """
+        self.cf.set('vm_state', VmState.PRIMARY)
         running_vms = self.get_running_vms()
         if running_vms:
             raise UsageError('Env has running vms. Please stop them before create-primary.')
 
-        provider_role = self.cf.get('primary_provider_role')
-        if not provider_role:
-            raise ValueError('Invalid provider role: %s' % provider_role)
-
-        magic_roles = self.cf.getlist('magic_roles', default=[])
-        do_vm_lookup = self.cf.getboolean('do_vm_lookup', default=False)
-        if provider_role in magic_roles:
-            provider_vm = None
-        elif do_vm_lookup:
-            provider_vm = self.get_provider_vm(provider_role, provider_id)
-        else:
-            provider_vm = None
-
         self.modcmd_init(VmCmd.PREP)
 
         start = time.time()
+
+        #archiveq_provider_id = self.cf.get('archiveq_provider_id')
+        #print(archiveq_provider_id)
+
+        recentq_provider_id = self.cf.get('recentq_provider_id')
+        print(recentq_provider_id)
+
         ids = self.cmd_create()
 
         first = None
         for vm_id in ids:
             if not first:
                 first = vm_id
-            self.do_prep(vm_id, VmState.PRIMARY, provider_vm)
+            self.do_prep(vm_id)
 
         self.assign_vm(first, True)
 
@@ -1959,27 +1955,9 @@ class VmTool(EnvScript):
         return first
 
     def cmd_create_secondary(self, provider_id: typing.Optional[str]=None):
-        """Create secondary vm from the same service.
-
-        provider_id: same ps node
-        provider_role should always be same as self
-
+        """Create secondary vm.
         Group: vm
         """
-        provider_role = self.cf.view_section('vm-config').get('secondary_provider_role')
-        if not provider_role:
-            raise ValueError('Invalid provider role: %s' % provider_role)
-
-        magic_roles = self.cf.getlist('magic_roles', default=[])
-        do_vm_lookup = self.cf.getboolean('do_vm_lookup', default=False)
-
-        if provider_role in magic_roles:
-            provider_vm = None
-        elif do_vm_lookup:
-            provider_vm = self.get_provider_vm(provider_role, provider_id)
-        else:
-            provider_vm = None
-
         start = time.time()
 
         self.modcmd_init(VmCmd.PREP)
@@ -2183,11 +2161,10 @@ class VmTool(EnvScript):
         except NoOptionError:
             raise UsageError("%s: key not found: %s" % (fname, key))
 
-    def make_filter(self, vm_id, vm_state, extra_defs=None): #FIXME:
+    def make_filter(self, vm_id, extra_defs=None): #FIXME:
         # env description
         defs = {
             'INSTANCE_ID': vm_id,
-            'VM_STATE': vm_state,
         }
         if extra_defs:
             defs.update(extra_defs)
@@ -2256,6 +2233,15 @@ class VmTool(EnvScript):
         # FIXME: proper multi-AZ support
         return val[0]
 
+    def conf_func_primary_vm(self, arg, sect, kname):
+        """Lookup primary vm.
+
+        Usage: ${PRIMARY_VM ! {{primary_provider_role}}}
+        """
+        print('PRIMARY_VM_ARG: %s' % arg)
+        vm = self.get_provider_vm(arg)
+        return vm['InstanceId']
+
     def cmd_prep(self, vm_id, vm_state: VmState, *provider_ids):
         """Run prep.sh on vm.
 
@@ -2264,21 +2250,14 @@ class VmTool(EnvScript):
         self.modcmd_init(VmCmd.PREP)
         self.do_prep(vm_id, vm_state, *provider_ids)
 
-    def do_prep(self, vm_id: str, vm_state: VmState, provider_vm: dict):
+    def do_prep(self, vm_id: str):
         """Do 'prep' command without init.
         """
         # pause for a moment
         time.sleep(15)
 
-        if vm_state == VmState.PRIMARY:
-            pass
-        elif vm_state == VmState.SECONDARY:
-            pass
-        else:
-            raise ValueError('Invalid value for vm_state="%s"' % vm_state)
-
         cmd = VmCmd.PREP
-        self.modcmd_prepare([vm_id], cmd, vm_state=vm_state, provider_vm=provider_vm)
+        self.modcmd_prepare([vm_id], cmd)
         self.modcmd_run(cmd)
 
     def load_vm_file(self, vm_id, fn):
@@ -2366,11 +2345,7 @@ class VmTool(EnvScript):
             subenv['VMTOOL_ENV_NAME'] = self.full_role
             run_successfully([init_script], cwd=self.git_dir, shell=True, env=subenv)
 
-    def modcmd_prepare(self, args, cmd_name: VmCmd,
-                       vm_state: VmState = VmState.UNKNOWN,
-                       provider_vm: dict = None,
-                       primary_vm: dict = None,
-                       secondary_vm: dict = None):
+    def modcmd_prepare(self, args, cmd_name: VmCmd):
         """Prepare data package for command.
         """
         cmd_cf = self.cf.view_section('cmd.%s' % cmd_name)
@@ -2392,29 +2367,10 @@ class VmTool(EnvScript):
 
         self._PREP_TGZ_CACHE[cmd_name] = {}
         for vm_id in ids:
-            self.newcmd_prepare_vm(cmd_name, vm_id, vm_state, globs, cmd_cf)
-
-        provider_id = '<null>'
-        if provider_vm:
-            provider_id = provider_vm['InstanceId']
-
-        primary_id = '<null>'
-        if primary_vm:
-            primary_id = primary_vm['InstanceId']
-
-        secondary_id = '<null>'
-        if secondary_vm:
-            secondary_id = secondary_vm['InstanceId']
+            self.newcmd_prepare_vm(cmd_name, vm_id, globs, cmd_cf)
 
         self._PREP_STAMP_CACHE[cmd_name] = {
             'ids': ids,                   #  main instances where scripts are run
-            'vm_state': vm_state,         #  main instance state
-
-            'provider_id': provider_id,
-
-            'primary_id': primary_id,
-
-            'secondary_id': secondary_id,
 
             'cmd_abbr': cmd_abbr,
             'stamp_dirs': stamp_dirs,
@@ -2432,9 +2388,7 @@ class VmTool(EnvScript):
             if not data_info:
                 data_info = 1
             print('RUNNING...')
-            self.run_mod_data(data, vm_id, info['vm_state'],
-                              info['provider_id'], info['primary_id'], info['secondary_id'],
-                              use_admin=info['use_admin'])
+            self.run_mod_data(data, vm_id, use_admin=info['use_admin'])
             if info['cmd_abbr']:
                 self.set_stamp(vm_id, info['cmd_abbr'], info['stamp'], *info['stamp_dirs'])
 
@@ -2470,7 +2424,7 @@ class VmTool(EnvScript):
             cf.set('vm-config', k, ', '.join(v))
 
     # in use
-    def newcmd_prepare_vm(self, cmd_name, vm_id, vm_state: VmState, globs, cmd_cf=None):
+    def newcmd_prepare_vm(self, cmd_name, vm_id, globs, cmd_cf=None):
         cwd = self.git_dir
         os.chdir(cwd)
 
@@ -2508,7 +2462,7 @@ class VmTool(EnvScript):
         if not mods_ok:
             sys.exit(1)
 
-        dst = self.make_filter(vm_id, vm_state, defs)
+        dst = self.make_filter(vm_id, defs)
 
         for tmp in globs:
             subdir = '.'
@@ -2591,7 +2545,7 @@ class VmTool(EnvScript):
             raise UsageError("CA key not found: %s" % last_key)
         return (last_key, last_crt)
 
-    def run_mod_data(self, data, vm_id, vm_state: VmState, provider_id='<null>', primary_id='<null>', secondary_id='<null>', use_admin=False):
+    def run_mod_data(self, data, vm_id, use_admin=False):
 
         run_user = 'root'
 
@@ -2601,7 +2555,7 @@ class VmTool(EnvScript):
             launcher = 'sudo -nH -u %s %s' % (run_user, launcher)
             rm_cmd = 'sudo -nH ' + rm_cmd
 
-        args = [vm_id, vm_state, provider_id, primary_id, secondary_id]
+        args = [vm_id]
 
         tmp_uuid = str(uuid.uuid4())
         time_printf("%s: Sending data - %d bytes", vm_id, len(data))
@@ -2843,6 +2797,9 @@ class VmTool(EnvScript):
         """
         self.change_cwd_adv()
 
+        self.resolve()
+
+
         # make sure it exists
         self.vm_lookup(secondary_id)
 
@@ -2869,24 +2826,6 @@ class VmTool(EnvScript):
             self.old_commit = provider_tags.get('Commit', '')
             if self.old_commit.find(':') > 0:
                 self.old_commit = self.old_commit.split(':')[1]
-
-        #  UNUSED
-        cmd = VmCmd.TAKEOVER_PREPARE_PROVIDER
-        if self.has_modcmd(cmd):
-            self.modcmd_init(cmd)
-            self.modcmd_prepare([provider_id], cmd,
-                                vm_state=VmState.SECONDARY,
-                                provider_vm=provider_vm)
-            self.modcmd_run(cmd)
-
-        #  UNUSED
-        cmd = VmCmd.TAKEOVER_PREPARE_SECONDARY
-        if self.has_modcmd(cmd):
-            self.modcmd_init(cmd)
-            self.modcmd_prepare([secondary_id], cmd,
-                                vm_state=VmState.PRIMARY,
-                                provider_vm=provider_vm)
-            self.modcmd_run(cmd)
 
         cmd = VmCmd.TAKEOVER_FINISH_PRIMARY
         if self.has_modcmd(cmd):
