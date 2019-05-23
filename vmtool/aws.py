@@ -1,9 +1,6 @@
 """AWS backend for vmtool.
 """
 
-import pprint
-import enum
-import typing
 import sys
 import os
 import os.path
@@ -968,7 +965,7 @@ class VmTool(EnvScript):
             if tag['Key'] == 'Env':
                 gotenv = True
                 if tag['Value'] != self.env_name:
-                        return False
+                    return False
             if tag['Key'] == 'Role':
                 gotrole = True
                 if role_name and tag['Value'] != role_name:
@@ -1927,9 +1924,8 @@ class VmTool(EnvScript):
         if running_vms:
             raise UsageError('Env has running vms. Please stop them before create-primary.')
 
-        self.modcmd_init(VmCmd.PREP)
-
         start = time.time()
+        self.modcmd_init(VmCmd.PREP)
 
         ids = self.cmd_create()
 
@@ -2155,11 +2151,8 @@ class VmTool(EnvScript):
         except NoOptionError:
             raise UsageError("%s: key not found: %s" % (fname, key))
 
-    def make_filter(self, vm_id, extra_defs=None): #FIXME:
-        # env description
-        defs = {
-            'INSTANCE_ID': vm_id,
-        }
+    def make_tar_filter(self, extra_defs=None):
+        defs = {}
         if extra_defs:
             defs.update(extra_defs)
         tb = TarFilter(self.filter_key_lookup, defs)
@@ -2236,23 +2229,14 @@ class VmTool(EnvScript):
         vm = self.get_provider_vm(arg)
         return vm['InstanceId']
 
-    def cmd_prep(self, vm_id, vm_state: VmState, *provider_ids):
-        """Run prep.sh on vm.
-
-        Group: admin
-        """
-        self.modcmd_init(VmCmd.PREP)
-        self.do_prep(vm_id, vm_state, *provider_ids)
-
     def do_prep(self, vm_id: str):
-        """Do 'prep' command without init.
+        """Run initialized 'prep' command.
         """
         # pause for a moment
         time.sleep(15)
 
         cmd = VmCmd.PREP
-        self.modcmd_prepare([vm_id], cmd)
-        self.modcmd_run(cmd)
+        self.modcmd_run(cmd, [vm_id])
 
     def load_vm_file(self, vm_id, fn):
         load_cmd = ["sudo", "-nH", "cat", fn]
@@ -2265,7 +2249,7 @@ class VmTool(EnvScript):
             data = self.load_vm_file(primary_id, primary_file)
             self.cf.set(vname, as_unicode(data))
 
-    _PREP_TGZ_CACHE = {}    # cmd->vmid->tgz
+    _PREP_TGZ_CACHE = {}    # cmd->tgz
     _PREP_STAMP_CACHE = {}  # cmd->stamp
 
     def cmd_mod_test(self, cmd_name):
@@ -2273,10 +2257,8 @@ class VmTool(EnvScript):
 
         Group: internal
         """
-        fake_vm = 'i-XXXXXXXX'
         self.modcmd_init(cmd_name)
-        self.modcmd_prepare([fake_vm], cmd_name)
-        data = self._PREP_TGZ_CACHE[cmd_name][fake_vm]
+        data = self._PREP_TGZ_CACHE[cmd_name]
         print("Data size: %d bytes" % len(data))
         return data
 
@@ -2285,10 +2267,8 @@ class VmTool(EnvScript):
 
         Group: internal
         """
-        fake_vm = 'i-XXXXXXXX'
         self.modcmd_init(cmd_name)
-        self.modcmd_prepare([fake_vm], cmd_name)
-        data = self._PREP_TGZ_CACHE[cmd_name][fake_vm]
+        data = self._PREP_TGZ_CACHE[cmd_name]
         fn = 'data.tgz'
         open(fn, 'wb').write(data)
         print("%s: %d bytes" % (fn, len(data)))
@@ -2339,7 +2319,9 @@ class VmTool(EnvScript):
             subenv['VMTOOL_ENV_NAME'] = self.full_role
             run_successfully([init_script], cwd=self.git_dir, shell=True, env=subenv)
 
-    def modcmd_prepare(self, args, cmd_name: VmCmd):
+        self.modcmd_prepare(cmd_name)
+
+    def modcmd_prepare(self, cmd_name: VmCmd):
         """Prepare data package for command.
         """
         cmd_cf = self.cf.view_section('cmd.%s' % cmd_name)
@@ -2347,38 +2329,24 @@ class VmTool(EnvScript):
         cmd_abbr = cmd_cf.get('command_tag', '')
         globs = cmd_cf.getlist('files', [])
         use_admin = cmd_cf.getboolean('use_admin', False)
-        ids = []
-        xargs = []
 
-        for a in args:
-            if a.startswith('i-') and not xargs:
-                ids.append(a)
-            else:
-                xargs.append(a)
-
-        if not ids:
-            ids = self.get_primary_vms()
-
-        self._PREP_TGZ_CACHE[cmd_name] = {}
-        for vm_id in ids:
-            self.newcmd_prepare_vm(cmd_name, vm_id, globs, cmd_cf)
+        self._PREP_TGZ_CACHE[cmd_name] = b''
+        self.modcmd_build_tgz(cmd_name, globs, cmd_cf)
 
         self._PREP_STAMP_CACHE[cmd_name] = {
-            'ids': ids,                   #  main instances where scripts are run
-
             'cmd_abbr': cmd_abbr,
             'stamp_dirs': stamp_dirs,
             'stamp': self.get_stamp(),
             'use_admin': use_admin,
         }
 
-    def modcmd_run(self, cmd_name):
+    def modcmd_run(self, cmd_name, vm_ids):
         """Send mod data to server and run it.
         """
         info = self._PREP_STAMP_CACHE[cmd_name]
         data_info = 0
-        for vm_id in info['ids']:
-            data = self._PREP_TGZ_CACHE[cmd_name][vm_id]
+        for vm_id in vm_ids:
+            data = self._PREP_TGZ_CACHE[cmd_name]
             if not data_info:
                 data_info = 1
             print('RUNNING...')
@@ -2418,7 +2386,7 @@ class VmTool(EnvScript):
             cf.set('vm-config', k, ', '.join(v))
 
     # in use
-    def newcmd_prepare_vm(self, cmd_name, vm_id, globs, cmd_cf=None):
+    def modcmd_build_tgz(self, cmd_name, globs, cmd_cf=None):
         cwd = self.git_dir
         os.chdir(cwd)
 
@@ -2456,7 +2424,7 @@ class VmTool(EnvScript):
         if not mods_ok:
             sys.exit(1)
 
-        dst = self.make_filter(vm_id, defs)
+        dst = self.make_tar_filter(defs)
 
         for tmp in globs:
             subdir = '.'
@@ -2518,7 +2486,8 @@ class VmTool(EnvScript):
         # finish
         dst.close()
         tgz = dst.getvalue()
-        self._PREP_TGZ_CACHE[cmd_name][vm_id] = tgz
+        self._PREP_TGZ_CACHE[cmd_name] = tgz
+        time_printf("%s: tgz bytes: %s", cmd_name, len(tgz))
 
     def load_ca_keypair(self, ca_name):
         intca_dir = self.cf.get(ca_name + '_dir', '')
@@ -2774,11 +2743,7 @@ class VmTool(EnvScript):
         cmd = VmCmd.FAILOVER_PROMOTE_SECONDARY
         if self.has_modcmd(cmd):
             self.modcmd_init(cmd)
-            self.modcmd_prepare([secondary_id], cmd,
-                                vm_state=VmState.PRIMARY,
-                                primary_id=primary_id,
-                                primary_private_ip='<dead-ip>')
-            self.modcmd_run(cmd)
+            self.modcmd_run(cmd, [secondary_id])
 
         self.raw_assign_vm(secondary_id)
 
@@ -2791,8 +2756,7 @@ class VmTool(EnvScript):
         """
         self.change_cwd_adv()
 
-        self.resolve()
-
+        #self.resolve()
 
         # make sure it exists
         self.vm_lookup(secondary_id)
@@ -2824,18 +2788,12 @@ class VmTool(EnvScript):
         cmd = VmCmd.TAKEOVER_FINISH_PRIMARY
         if self.has_modcmd(cmd):
             self.modcmd_init(cmd)
-            self.modcmd_prepare([primary_id], cmd,
-                                vm_state=VmState.SECONDARY)
-            self.modcmd_run(cmd)
+            self.modcmd_run(cmd, [primary_id])
 
         cmd = VmCmd.TAKEOVER_FINISH_SECONDARY
         if self.has_modcmd(cmd):
             self.modcmd_init(cmd)
-            self.modcmd_prepare([secondary_id], cmd,
-                                vm_state=VmState.PRIMARY,
-                                provider_vm=provider_vm,
-                                primary_vm=primary_vm)
-            self.modcmd_run(cmd)
+            self.modcmd_run(cmd, [secondary_id])
 
         self.raw_assign_vm(secondary_id)
 
@@ -2872,6 +2830,17 @@ class VmTool(EnvScript):
         #self.run_console_cmd('londiste', [vm_id, 'drop-node', vm_id])
         self.cmd_stop(vm_id)
 
+    def load_modcmd_args(self, args):
+        vms = []
+        for a in args:
+            if a.startswith('i-'):
+                vms.append(a)
+            else:
+                raise UsageError("command supports only vmid args")
+        if vms:
+            return vms
+        return self.get_primary_vms()
+
     def work(self):
         cmd = self.options.command
         cmdargs = self.options.args
@@ -2882,10 +2851,10 @@ class VmTool(EnvScript):
         if self.cf.has_section(cmd_section):
             cf2 = self.cf.view_section(cmd_section)
             if cf2.get('vmlibs', ''):
+                vms = self.load_modcmd_args(cmdargs)
                 self.change_cwd_adv()
                 self.modcmd_init(cmd)
-                self.modcmd_prepare(cmdargs, cmd)
-                self.modcmd_run(cmd)
+                self.modcmd_run(cmd, vms)
             else:
                 self.run_console_cmd(cmd, cmdargs)
         else:
