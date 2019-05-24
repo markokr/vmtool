@@ -2731,6 +2731,8 @@ class VmTool(EnvScript):
                 raise UsageError('Dont know how to handle several primaries')
         primary_id = primary_ids[0]
 
+        self.cf.set('primary_vm_id', primary_id)
+
         # make sure it exists
         self.vm_lookup(secondary_id)
 
@@ -2761,6 +2763,8 @@ class VmTool(EnvScript):
 
         # old primary
         primary_id = vm_ids[0]
+
+        self.cf.set('primary_vm_id', primary_id)
 
         cmd = VmCmd.TAKEOVER_PREPARE_PRIMARY
         if self.has_modcmd(cmd):
