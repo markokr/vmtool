@@ -1915,9 +1915,14 @@ class VmTool(EnvScript):
         Group: vm
         """
         self.cf.set('vm_state', VmState.PRIMARY)
-        running_vms = self.get_running_vms()
-        if running_vms:
-            raise UsageError('Env has running vms. Please stop them before create-primary.')
+
+        primary_check_old = self.cf.getboolean('primary_check_old', False)
+        primary_stop_old = self.cf.getboolean('primary_stop_old', False)
+
+        if primary_check_old:
+            running_vms = self.get_running_vms()
+            if running_vms:
+                raise UsageError('Env has running vms. Please stop them before create-primary.')
 
         start = time.time()
         self.modcmd_init(VmCmd.PREP)
@@ -1930,7 +1935,7 @@ class VmTool(EnvScript):
                 first = vm_id
             self.do_prep(vm_id)
 
-        self.assign_vm(first, True)
+        self.assign_vm(first, primary_stop_old)
 
         end = time.time()
         printf("VM ID: %s", ", ".join(ids))
