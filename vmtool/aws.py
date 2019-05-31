@@ -56,14 +56,6 @@ echo "$INSTANCE_ID: entropy added" > /dev/console
 --===BND===--
 """
 
-SSH_CONFIG = [
-    '-o', 'ServerAliveInterval=60',
-    '-o', 'HashKnownHosts=yes',
-    '-o', 'StrictHostKeyChecking=yes',
-    '-o', 'IdentitiesOnly=yes',
-    '-o', 'PreferredAuthentications=publickey',
-]
-
 
 def show_commits(old_id, new_id, dirs, cwd):
     cmd = ['git', '--no-pager', 'shortlog', '--no-merges', old_id + '..' + new_id]
@@ -566,8 +558,10 @@ class VmTool(EnvScript):
         if self.options.verbose:
             ssh_debug = '-v'
 
+        ssh_options = shlex.split(self.cf.get('ssh_options', ''))
+
         return ['ssh', ssh_debug, '-i', self.get_ssh_kfile(), '-l', ssh_user,
-                '-o', 'UserKnownHostsFile=' + self.ssh_known_hosts] + SSH_CONFIG
+                '-o', 'UserKnownHostsFile=' + self.ssh_known_hosts] + ssh_options
 
     def vm_exec(self, vm_id, cmdline, stdin=None, get_output=False, check_error=True, use_admin=False):
         logging.debug("EXEC@%s: %s", vm_id, cmdline)
