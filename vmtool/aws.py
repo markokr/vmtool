@@ -100,6 +100,7 @@ class VmCmd:
     TAKEOVER_FINISH_PRIMARY:str = 'takeover_finish_primary'
     TAKEOVER_FINISH_SECONDARY:str  = 'takeover_finish_secondary'
 
+    DROP_NODE_PREPARE:str = 'drop_node_prepare'
 
 class VmState:
     PRIMARY: str = 'primary'
@@ -1962,6 +1963,9 @@ class VmTool(EnvScript):
         end = time.time()
         printf("VM ID: %s", ", ".join(ids))
         printf("Total time: %d", int(end - start))
+
+        #  reset vm state
+        self.cf.set('vm_state', VmState.PRIMARY)
         return first
 
     def cmd_add_key(self, vm_id):
@@ -2821,8 +2825,13 @@ class VmTool(EnvScript):
 
         Group: vm
         """
-        printf("Drop simple node: %s", vm_id)
-        #self.run_console_cmd('londiste', [vm_id, 'drop-node', vm_id])
+        printf("Drop node: %s", vm_id)
+
+        cmd = VmCmd.DROP_NODE_PREPARE
+        if self.has_modcmd(cmd):
+            self.modcmd_init(cmd)
+            self.modcmd_run(cmd, [vm_id])
+
         self.cmd_stop(vm_id)
 
     def load_modcmd_args(self, args):
