@@ -9,7 +9,8 @@ __all__ = ['load_cert_config']
 
 
 def load_cert_config(fn, load_ca, defs):
-    cf = ConfigParser(defaults=defs, interpolation=ExtendedInterpolation())
+    cf = ConfigParser(defaults=defs, interpolation=ExtendedInterpolation(),
+                      delimiters=['='], comment_prefixes=['#'], inline_comment_prefixes=['#'])
     cf.read([fn])
     return process_config(cf, load_ca)
 

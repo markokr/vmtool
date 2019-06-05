@@ -51,7 +51,8 @@ class Config(object):
         self.main_section = main_section
         self.filename = filename
         self.override = override or {}
-        self.cf = ConfigParser(interpolation=AdvancedInterpolation(func_map=func_map))
+        self.cf = ConfigParser(interpolation=AdvancedInterpolation(func_map=func_map),
+                               delimiters=['='], comment_prefixes=['#'], inline_comment_prefixes=['#'])
 
         if filename is None:
             self.cf.add_section(main_section)
