@@ -161,6 +161,8 @@ class VmTool(EnvScript):
             'TF': self.conf_func_tf,
             'TFAZ': self.conf_func_tfaz,
             'PRIMARY_VM': self.conf_func_primary_vm,
+            'NETWORK': self.conf_func_network,
+            'NETMASK': self.conf_func_netmask,
         })
         self.process_pkgs()
 
@@ -2225,6 +2227,16 @@ class VmTool(EnvScript):
         """
         vm = self.get_primary_for_role(arg)
         return vm['InstanceId']
+
+    def conf_func_network(self, arg, sect, kname):
+        """Extract network address from CIDR.
+        """
+        return str(ipaddress.ip_network(arg).network_address)
+
+    def conf_func_netmask(self, arg, sect, kname):
+        """Extract 32-bit netmask from CIDR.
+        """
+        return str(ipaddress.ip_network(arg).netmask)
 
     def do_prep(self, vm_id: str):
         """Run initialized 'prep' command.
