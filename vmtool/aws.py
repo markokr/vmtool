@@ -265,6 +265,7 @@ class VmTool(EnvScript):
         p.add_argument("--ssh-key", help="Use different SSH key")
         p.add_argument("--all-role-vms", action="store_true", help="Run command on all vms for role")
         p.add_argument("--running", action="store_true", help="Show only running instances")
+        p.add_argument("--az", type=int, default=0, help="Set availability zone")
         return p
 
     def get_boto3_session(self, region=None):
@@ -1850,10 +1851,10 @@ class VmTool(EnvScript):
 
             devlog.append(dev)
 
-        time_printf("AWS=%s Env=%s Role=%s Key=%s Image=%s(%s)",
+        time_printf("AWS=%s Env=%s Role=%s Key=%s Image=%s(%s) AZ=%d",
                     self.cf.get('aws_main_account'),
                     self.env_name, self.role_name or '-', key_name,
-                    image_name, image_id)
+                    image_name, image_id, self.options.az)
 
         time_printf("Creating VM, storage: %s" % ', '.join(devlog))
 
@@ -2298,8 +2299,9 @@ class VmTool(EnvScript):
         val = tf_load_output_var(state_file, arg)
         if not isinstance(val, list):
             raise UsageError("TFAZ function expects list param: %s" % kname)
-        # FIXME: proper multi-AZ support
-        return val[0]
+        if self.options.az < 0 or self.options.az >= len(val):
+            raise UsageError("AZ value out of range")
+        return val[self.options.az]
 
     def conf_func_primary_vm(self, arg, sect, kname):
         """Lookup primary vm.
