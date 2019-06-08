@@ -26,6 +26,7 @@ from fnmatch import fnmatch
 
 import boto3.session
 import boto3.s3.transfer
+import botocore.session
 
 from vmtool.util import ssh_add_known_host, parse_console, rsh_quote, as_unicode
 from vmtool.util import printf, eprintf, time_printf, print_json, local_cmd, run_successfully
@@ -77,6 +78,7 @@ done
 
 '''
 
+
 def mk_sshuser_script(user, auth_groups, pubkey):
     return SSH_USER_CREATION.format(user=user, auth_groups=' '.join(auth_groups), pubkey=pubkey)
 
@@ -105,6 +107,9 @@ class VmTool(EnvScript):
     _boto_sessions = None
     _boto_clients = None
 
+    _pricing_cache = {}
+    _endpoints = None
+
     _vm_map = None
 
     role_name = None
@@ -114,8 +119,6 @@ class VmTool(EnvScript):
 
     new_commit = None
     old_commit = None
-
-    _price_data = None
 
     log = logging.getLogger('vmtool')
 
@@ -279,7 +282,9 @@ class VmTool(EnvScript):
         return self._boto_sessions[region]
 
     def get_boto3_client(self, svc, region=None):
-        if not region:
+        if svc == 'pricing':
+            region = 'us-east-1'
+        elif not region:
             region = self._region
         if self._boto_clients is None:
             self._boto_clients = {}
@@ -317,6 +322,9 @@ class VmTool(EnvScript):
     def get_ec2_client(self, region=None):
         return self.get_boto3_client('ec2', region)
 
+    def get_pricing_client(self, region=None):
+        return self.get_boto3_client('pricing', region)
+
     def pager(self, client, method, rname):
         """Create pager function for looping over long results.
         """
@@ -334,6 +342,136 @@ class VmTool(EnvScript):
         for rv in pager(**kwargs):
             for vm in rv['Instances']:
                 yield vm
+
+    def pricing_iter_services(self, **kwargs):
+        """Pricing.Client.describe_services"""
+        client = self.get_pricing_client()
+        pager = self.pager(client, 'describe_services', 'Services')
+        for rec in pager(**kwargs):
+            yield rec
+
+    def pricing_iter_products(self, **kwargs):
+        """Pricing.Client.get_products"""
+        client = self.get_pricing_client()
+        pager = self.pager(client, 'get_products', 'PriceList')
+        for rec in pager(**kwargs):
+            yield json.loads(rec)
+
+    def pricing_iter_attribute_values(self, **kwargs):
+        """Pricing.Client.get_attribute_values"""
+        client = self.get_pricing_client()
+        pager = self.pager(client, 'get_attribute_values', 'AttributeValues')
+        for rec in pager(**kwargs):
+            yield rec
+
+    def get_region_desc(self, region):
+        if self._endpoints is None:
+            self._endpoints = botocore.session.get_session().get_data('endpoints')
+            if self._endpoints['version'] != 3:
+                raise Exception("unsupported endpoints version: %d" % self._endpoints['version'])
+        for part in self._endpoints['partitions']:
+            if part['partition'] == 'aws':
+                return part['regions'][region]['description']
+        raise Exception("did not find 'aws' partition")
+
+    def get_volume_desc(self, vol_type):
+        VMAP = {
+            'standard': 'Magnetic',
+            'gp2': 'General Purpose',
+            'io1': 'Provisioned IOPS',
+            'st1': 'Throughput Optimized HDD',
+            'sc1': 'Cold HDD',
+        }
+        return VMAP[vol_type]
+
+    def get_cached_pricing(self, **kwargs):
+        """Fetch pricing for single product, cache based on filter.
+        """
+        filters = []
+        for k, v in kwargs.items():
+            filters.append({'Type': 'TERM_MATCH', 'Field': k, 'Value': v})
+        cache_key = json.dumps(kwargs, sort_keys=True)
+        if cache_key not in self._pricing_cache:
+            res = []
+            for rec in self.pricing_iter_products(FormatVersion='aws_v1', ServiceCode='AmazonEC2', Filters=filters):
+                res.append(rec)
+            if len(res) != 1:
+                raise UsageError("Broken pricing filter: expect 1 row, got %d" % len(res))
+            self._pricing_cache[cache_key] = res[0]
+        return self._pricing_cache[cache_key]
+
+    def get_offer_price(self, offer, unit):
+        prices = list(offer['priceDimensions'].values())
+        if len(prices) != 1:
+            raise Exception('prices: expected one value, got %d' % len(prices))
+        if prices[0]['unit'] != unit:
+            raise Exception('prices: expected %s, got %s' % (unit, prices[0]['unit']))
+        return float(prices[0]['pricePerUnit']['USD'])
+
+    def get_vm_pricing(self, region, vmtype):
+        """Return simplified price object for vm cost.
+        """
+
+        def loadOnDemand(vmdata):
+            """Return hourly price for ondemand instances."""
+            offers = list(vmdata['terms']['OnDemand'].values())
+            if len(offers) != 1:
+                raise Exception('OnDemand.offers: expected one value, got %d' % len(offers))
+            return self.get_offer_price(offers[0], 'Hrs')
+
+        def loadReserved(vmdata):
+            """Return hourly price for reserved (no-upfront/standard/1yr) instances."""
+            got = []
+            for offer in vmdata['terms']['Reserved'].values():
+                atts = offer['termAttributes']
+                opt = atts['PurchaseOption']        # No Upfront, All Upfront, Partial Upfront
+                cls = atts['OfferingClass']         # standard, convertible
+                lse = atts['LeaseContractLength']   # 1yr, 3yr
+                if (opt, cls, lse) == ('No Upfront', 'standard', '1yr'):
+                    got.append(self.get_offer_price(offer, 'Hrs'))
+            if len(got) != 1:
+                raise Exception('expected one value, got %d' % len(got))
+            return got[0]
+
+        vmdata = self.get_cached_pricing(ServiceCode='AmazonEC2',
+            location=self.get_region_desc(region),
+            instanceType=vmtype,
+            preInstalledSw='NA',        # NA, SQL Ent, SQL Std, SQL Web
+            operatingSystem='Linux',    # NA, Linux, RHEL, SUSE, Windows
+            tenancy='Shared',           # NA, Dedicated, Host, Reserved, Shared
+            capacitystatus='Used')      # NA, Used, AllocatedCapacityReservation, AllocatedHost, UnusedCapacityReservation
+
+        return {
+            'onDemandHourly': loadOnDemand(vmdata),
+            'reservedHourly': loadReserved(vmdata),
+        }
+
+    def get_volume_pricing(self, region, vol_type):
+        """Return numeric price for volume cost.
+        """
+        p = self.get_cached_pricing(ServiceCode='AmazonEC2',
+            location=self.get_region_desc(region),
+            volumeType=self.get_volume_desc(vol_type))
+
+        offers = list(p['terms']['OnDemand'].values())
+        if len(offers) != 1:
+            raise Exception('expected one value, got %d' % len(offers))
+        return self.get_offer_price(offers[0], 'GB-Mo')
+
+    def cmd_debug_pricing(self):
+        svclist = list(self.pricing_iter_services(ServiceCode="AmazonEC2"))
+        print(json.dumps(svclist, indent=2))
+        for svc in svclist:
+            code = svc['ServiceCode']
+            for att in svc['AttributeNames']:
+                vlist = []
+                cnt = 0
+                for val in self.pricing_iter_attribute_values(ServiceCode=code, AttributeName=att):
+                    vlist.append(val['Value'])
+                    cnt += 1
+                    if cnt > 40:
+                        break
+                print('%s.%s = %r' % (code, att, vlist))
 
     def route53_iter_rrsets(self, **kwargs):
         client = self.get_route53()
@@ -1040,64 +1178,6 @@ class VmTool(EnvScript):
             printf("  Price: fixed={FixedPrice} usage={UsagePrice} recur=".format(**rvm) + plist)
             printf("  Dur: start=%s end=%s", tstart, tend)
 
-    def load_prices(self):
-        """Load pricing data from JS file.
-        """
-        price_fn = self.cf.getfile('price_data_file')
-        if self._price_data is None:
-            fn = os.path.join(self.git_dir, 'extra/cost/linux.js')
-            data = open(fn, 'r').read()
-            p1 = data.find('({')
-            p2 = data.rfind('})')
-            data = re.sub(r'([a-zA-Z0-9_]+):', r'"\1":', data[p1 + 1 : p2 + 1])
-            data = data.replace(': .', ': 0.')
-            self._price_data = json.loads(data)
-        return self._price_data
-
-    def find_price(self, region, vmtype, term='yrTerm1Standard', opt='noUpfront'):
-        """Find price for specific offering
-        """
-
-        def findCol(lst, col, val):
-            for obj in lst:
-                if obj[col] == val:
-                    return obj
-            raise KeyError("findCol failed: " + col + " value not found: " + val)
-
-        if vmtype == 'm3.large':
-            return {'onDemandHourly': 0.146, 'reservedHourly': 0.146}
-        if vmtype == 't3.large':
-            return {'onDemandHourly': 0.0912, 'reservedHourly': 0.065}
-
-        pdata = self.load_prices()
-        rdata = findCol(pdata['config']['regions'], 'region', region)
-        vmdata = findCol(rdata['instanceTypes'], 'type', vmtype)
-        tdata = findCol(vmdata['terms'], 'term', term)
-        optdata = findCol(tdata['purchaseOptions'], 'purchaseOption', opt)
-        optprice = findCol(optdata['valueColumns'], 'name', 'effectiveHourly')
-        stdprice = findCol(tdata['onDemandHourly'], 'purchaseOption', 'ODHourly')
-
-        return {
-            'onDemandHourly': float(stdprice['prices']['USD']),
-            'reservedHourly': float(optprice['prices']['USD']),
-        }
-
-    def cmd_pricing_info(self):
-        region = 'eu-west-1'
-        client = self.get_boto3_client('pricing', region)
-        pager = self.pager(client, 'describe_services', 'Services')
-        for svc in pager(ServiceCode='AmazonEC2', FormatVersion='aws_v1'):
-            print_json(svc)
-
-    def cmd_products_info(self):
-        print(boto3.__version__)
-        region = 'eu-west-1'
-        region = 'eu-central-1'
-        client = self.get_boto3_client('pricing', region)
-        pager = self.pager(client, 'get_products', 'PriceList')
-        for svc in pager(ServiceCode='AmazonEC2', FormatVersion='aws_v1'):
-            print_json(svc)
-
     def show_vmtype(self, region, vmtype, nActive, nReserved, names):
         """Shoe one vmtype stats with pricing.
         """
@@ -1105,7 +1185,7 @@ class VmTool(EnvScript):
         odCount = 0
         if nActive > nReserved:
             odCount = nActive - nReserved
-        price = self.find_price(region, vmtype)
+        price = self.get_vm_pricing(region, vmtype)
         rawMonth = int(nActive * price['onDemandHourly'] * 24 * 30)
         odMonth = int(odCount * price['onDemandHourly'] * 24 * 30)
         rMonth = int(nReserved * price['reservedHourly'] * 24 * 30)
@@ -1207,11 +1287,20 @@ class VmTool(EnvScript):
                 info[vtype] = 0
             info[vtype] += vol['Size']
 
-        def show(name, info):
-            parts = ['%s=%d' % (t, info[t]) for t in sorted(info)]
+        def show(name, info, region):
+            parts = []
+            for t in sorted(info):
+                s = '%s=%d' % (t, info[t])
+                if not t.startswith('vm-'):
+                    p = self.get_volume_pricing(region, t) * info[t]
+                    if p > 1:
+                        s += ' ($%d/m)' % int(p)
+                    else:
+                        s += ' ($%.02f/m)' % (p)
+                parts.append(s)
             if not parts:
                 parts = ['-']
-            printf('%s: %s', name, ', '.join(parts))
+            printf('%-20s %s', name+':', ', '.join(parts))
 
         all_regions = self.cf.getlist('all_regions')
         for region in all_regions:
@@ -1255,8 +1344,8 @@ class VmTool(EnvScript):
             if totals or vol_map:
                 for rname in sorted(envmap):
                     info = envmap[rname]
-                    show(rname, info)
-                show('* total', totals)
+                    show(rname, info, region)
+                show('* total', totals, region)
 
                 for vol_id in vol_map:
                     if vol_id not in gotVol:
