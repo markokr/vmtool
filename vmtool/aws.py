@@ -344,6 +344,12 @@ class VmTool(EnvScript):
             for vm in rv['Instances']:
                 yield vm
 
+    def ec2_iter(self, func, result, region=None, **kwargs):
+        client = self.get_ec2_client(region)
+        pager = self.pager(client, func, result)
+        for rec in pager(**kwargs):
+            yield rec
+
     def pricing_iter_services(self, **kwargs):
         """Pricing.Client.describe_services"""
         client = self.get_pricing_client()
@@ -479,36 +485,14 @@ class VmTool(EnvScript):
         pager = self.pager(client, 'list_resource_record_sets', 'ResourceRecordSets')
         return pager(**kwargs)
 
-    def vpc_lookup(self, vpc_name):
-        client = self.get_ec2_client()
-        res = client.describe_vpcs()
-        for v in res['Vpcs']:
-            if vpc_name == v['VpcId']:
-                return v['VpcId']
-            tags = self.load_tags(v)
-            if tags.get('Name') == vpc_name:
-                return v['VpcId']
-        raise Exception("vpc not found: %r" % vpc_name)
-
     def sgroups_lookup(self, sgs_list):
         # manual lookup for sgs
         sg_ids = []
-        names = []
         for sg in sgs_list:
             if sg.startswith('sg-'):
                 sg_ids.append(sg)
             else:
-                names.append(sg)
-        if names:
-            printf('DEPRECATED: sgroups_lookup: %r', names)
-            client = self.get_ec2_client()
-            res = client.describe_security_groups()
-            for sg in res['SecurityGroups']:
-                if sg.get('GroupName') in names:
-                    sg_ids.append(sg['GroupId'])
-                    names.remove(sg.get('GroupName'))
-            if names:
-                raise Exception("security groups not found: %r" % names)
+                raise UsageError("deprecated non-id sg: %r" % sg)
         return sg_ids
 
     def show_vm_list(self, vm_list, adrmap=None, dnsmap=None):
@@ -653,15 +637,9 @@ class VmTool(EnvScript):
                     vols.add(ebs['VolumeId'])
 
         printf("get_volume_map: %r", vols)
-        for vol in self.ec2_iter_volumes(VolumeIds=list(vols)):
+        for vol in self.ec2_iter('describe_volumes', 'Volumes', VolumeIds=list(vols)):
             vmap[vol['VolumeId']] = vol
         return vmap
-
-    def ec2_iter_volumes(self, region=None, **kwargs):
-        client = self.get_ec2_client(region)
-        pager = self.pager(client, 'describe_volumes', 'Volumes')
-        for vol in pager(**kwargs):
-            yield vol
 
     def get_ssh_kfile(self):
         # load encrypted key
@@ -1309,7 +1287,7 @@ class VmTool(EnvScript):
             totals = {}
             gotVol = set()
 
-            for vol in self.ec2_iter_volumes(region=region):
+            for vol in self.ec2_iter('describe_volumes', 'Volumes', region=region):
                 vol_map[vol['VolumeId']] = vol
 
             for vm in self.ec2_iter_instances(region=region, Filters=[]):
@@ -1956,30 +1934,7 @@ class VmTool(EnvScript):
                 time.sleep(5)
         time_printf("Instance is now starting up")
 
-        self.cmd_classiclink(*ids)
-
         return ids
-
-    def cmd_classiclink(self, *ids):
-        """Set up classiclink.
-
-        Group: vm
-        """
-        if not ids:
-            ids = self.get_primary_vms()
-        vpc_name = self.cf.get('classic_link_vpc', '')
-        if not vpc_name:
-            return
-
-        time_printf("Setting up ClassicLink")
-        vpc_id = self.vpc_lookup(vpc_name)
-
-        sg_names = self.cf.getlist('classic_link_groups', '')
-        sg_ids = self.sgroups_lookup(sg_names)
-
-        client = self.get_ec2_client()
-        for vm_id in ids:
-            client.attach_classic_link_vpc(InstanceId=vm_id, VpcId=vpc_id, Groups=sg_ids)
 
     def vm_create_finish(self, ids):
         for vm_id in ids:
