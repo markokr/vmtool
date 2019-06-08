@@ -336,8 +336,8 @@ class VmTool(EnvScript):
                     yield rec
         return pager
 
-    def ec2_iter_instances(self, **kwargs):
-        client = self.get_ec2_client()
+    def ec2_iter_instances(self, region=None, **kwargs):
+        client = self.get_ec2_client(region)
         pager = self.pager(client, 'describe_instances', 'Reservations')
         for rv in pager(**kwargs):
             for vm in rv['Instances']:
@@ -656,8 +656,8 @@ class VmTool(EnvScript):
             vmap[vol['VolumeId']] = vol
         return vmap
 
-    def ec2_iter_volumes(self, **kwargs):
-        client = self.get_ec2_client()
+    def ec2_iter_volumes(self, region=None, **kwargs):
+        client = self.get_ec2_client(region)
         pager = self.pager(client, 'describe_volumes', 'Volumes')
         for vol in pager(**kwargs):
             yield vol
@@ -1246,18 +1246,16 @@ class VmTool(EnvScript):
 
             # scan running instances
             flist = [{'Name': 'instance-state-name', 'Values': ['running']}]
-            pager = self.pager(client, 'describe_instances', 'Reservations')
-            for rv in pager(Filters=flist):
-                for vm in rv['Instances']:
-                    vm_type = vm['InstanceType']
-                    if vm_type not in tmap:
-                        tmap[vm_type] = 0
-                    tmap[vm_type] += 1
+            for vm in self.ec2_iter_instances(region=region, Filters=flist):
+                vm_type = vm['InstanceType']
+                if vm_type not in tmap:
+                    tmap[vm_type] = 0
+                tmap[vm_type] += 1
 
-                    rname = self.load_vmenv(vm)
-                    if vm_type not in envmap:
-                        envmap[vm_type] = set()
-                    envmap[vm_type].add(rname)
+                rname = self.load_vmenv(vm)
+                if vm_type not in envmap:
+                    envmap[vm_type] = set()
+                envmap[vm_type].add(rname)
 
             if not tmap and not rmap:
                 continue
@@ -1311,35 +1309,30 @@ class VmTool(EnvScript):
             totals = {}
             gotVol = set()
 
-            client = self.get_ec2_client(region)
-
-            vol_pager = self.pager(client, 'describe_volumes', 'Volumes')
-            for vol in vol_pager():
+            for vol in self.ec2_iter_volumes(region=region):
                 vol_map[vol['VolumeId']] = vol
 
-            vm_pager = self.pager(client, 'describe_instances', 'Reservations')
-            for rv in vm_pager(Filters=[]):
-                for vm in rv['Instances']:
-                    rname = self.load_vmenv(vm)
-                    if rname not in envmap:
-                        envmap[rname] = {}
-                    rinfo = envmap[rname]
+            for vm in self.ec2_iter_instances(region=region, Filters=[]):
+                rname = self.load_vmenv(vm)
+                if rname not in envmap:
+                    envmap[rname] = {}
+                rinfo = envmap[rname]
 
-                    sname = 'vm-' + vm['State']['Name']
-                    if sname not in rinfo:
-                        rinfo[sname] = 0
-                    rinfo[sname] += 1
+                sname = 'vm-' + vm['State']['Name']
+                if sname not in rinfo:
+                    rinfo[sname] = 0
+                rinfo[sname] += 1
 
-                    for bdev in vm.get('BlockDeviceMappings', []):
-                        ebs = bdev.get('Ebs')
-                        if ebs:
-                            gotVol.add(ebs['VolumeId'])
-                            vol = vol_map.get(ebs['VolumeId'])
-                            if vol:
-                                addVol(totals, vol)
-                                addVol(rinfo, vol)
-                            else:
-                                printf('Missing vol: %s, instance: %s', ebs['VolumeId'], vm['InstanceId'])
+                for bdev in vm.get('BlockDeviceMappings', []):
+                    ebs = bdev.get('Ebs')
+                    if ebs:
+                        gotVol.add(ebs['VolumeId'])
+                        vol = vol_map.get(ebs['VolumeId'])
+                        if vol:
+                            addVol(totals, vol)
+                            addVol(rinfo, vol)
+                        else:
+                            printf('Missing vol: %s, instance: %s', ebs['VolumeId'], vm['InstanceId'])
 
             if totals or vol_map:
                 for rname in sorted(envmap):
