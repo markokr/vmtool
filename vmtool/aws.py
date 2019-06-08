@@ -1160,10 +1160,10 @@ class VmTool(EnvScript):
     # describe_reserved_instances_modifications()
     #
 
-    def cmd_show_res(self, *cmdargs):
+    def cmd_show_reserved(self, *cmdargs):
         """Show reserved instances.
 
-        Group: info
+        Group: pricing
         """
         client = self.get_ec2_client()
         response = client.describe_reserved_instances()
@@ -1178,7 +1178,7 @@ class VmTool(EnvScript):
             printf("  Price: fixed={FixedPrice} usage={UsagePrice} recur=".format(**rvm) + plist)
             printf("  Dur: start=%s end=%s", tstart, tend)
 
-    def show_vmtype(self, region, vmtype, nActive, nReserved, names):
+    def show_vmcost(self, region, vmtype, nActive, nReserved, names):
         """Shoe one vmtype stats with pricing.
         """
         nstep = 4
@@ -1222,10 +1222,10 @@ class VmTool(EnvScript):
             return env
         return None
 
-    def cmd_show_vmtypes(self):
-        """Show VM types.
+    def cmd_show_vmcost(self):
+        """Show VM cost.
 
-        Group: info
+        Group: pricing
         """
         all_regions = self.cf.getlist('all_regions')
         rawTotal = 0
@@ -1260,23 +1260,23 @@ class VmTool(EnvScript):
             if not tmap and not rmap:
                 continue
 
-            printf('region: %s' % region)
+            printf('-- %s --', region)
             for vm_type in sorted(tmap):
                 names = list(sorted(envmap[vm_type]))
-                rawSum, curSum = self.show_vmtype(region, vm_type, tmap[vm_type], rmap.get(vm_type, 0), names)
+                rawSum, curSum = self.show_vmcost(region, vm_type, tmap[vm_type], rmap.get(vm_type, 0), names)
                 rawTotal += rawSum
                 total += curSum
             for vm_type in rmap:
                 if vm_type not in tmap:
-                    rawSum, curSum = self.show_vmtype(region, vm_type, 0, rmap[vm_type], [])
+                    rawSum, curSum = self.show_vmcost(region, vm_type, 0, rmap[vm_type], [])
                     rawTotal += rawSum
                     total += curSum
-        printf('total: $%d/m  savings: $%d/m', total, rawTotal - total)
+        printf('total: $%d/m  reserved bonus: $%d/m', total, rawTotal - total)
 
-    def cmd_show_disktypes(self):
-        """Show disk types.
+    def cmd_show_ebscost(self):
+        """Show disk cost.
 
-        Group: info
+        Group: pricing
         """
 
         def addVol(info, vol):
@@ -1291,10 +1291,9 @@ class VmTool(EnvScript):
                 s = '%s=%d' % (t, info[t])
                 if not t.startswith('vm-'):
                     p = self.get_volume_pricing(region, t) * info[t]
-                    if p > 1:
-                        s += ' ($%d/m)' % int(p)
-                    else:
-                        s += ' ($%.02f/m)' % (p)
+                    if p < 1:
+                        p = 1
+                    s += ' ($%d/m)' % int(p)
                 parts.append(s)
             if not parts:
                 parts = ['-']
