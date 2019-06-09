@@ -440,8 +440,11 @@ class VmTool(EnvScript):
                 raise Exception('expected one value, got %d' % len(got))
             return got[0]
 
-        vmdata = self.get_cached_pricing(ServiceCode='AmazonEC2',
+        vmdata = self.get_cached_pricing(
+            ServiceCode='AmazonEC2',
+            locationType='AWS Region',
             location=self.get_region_desc(region),
+            productFamily='Compute Instance',
             instanceType=vmtype,
             preInstalledSw='NA',        # NA, SQL Ent, SQL Std, SQL Web
             operatingSystem='Linux',    # NA, Linux, RHEL, SUSE, Windows
@@ -456,8 +459,11 @@ class VmTool(EnvScript):
     def get_volume_pricing(self, region, vol_type):
         """Return numeric price for volume cost.
         """
-        p = self.get_cached_pricing(ServiceCode='AmazonEC2',
+        p = self.get_cached_pricing(
+            ServiceCode='AmazonEC2',
+            locationType='AWS Region',
             location=self.get_region_desc(region),
+            productFamily='Storage',
             volumeType=self.get_volume_desc(vol_type))
 
         offers = list(p['terms']['OnDemand'].values())
