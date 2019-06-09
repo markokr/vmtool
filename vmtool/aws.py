@@ -39,6 +39,7 @@ from vmtool.config import Config, NoOptionError
 from vmtool.terra import tf_load_output_var, tf_load_all_vars
 from vmtool.certs import load_cert_config
 
+
 # /usr/share/doc/cloud-init/userdata.txt
 USERDATA = """\
 MIME-Version: 1.0
@@ -58,25 +59,24 @@ echo "$INSTANCE_ID: entropy added" > /dev/console
 """
 
 
-def show_commits(old_id, new_id, dirs, cwd):
-    cmd = ['git', '--no-pager', 'shortlog', '--no-merges', old_id + '..' + new_id]
-    if dirs:
-        cmd.append('--')
-        cmd.extend(dirs)
-    subprocess.call(cmd, cwd=cwd)
-
 SSH_USER_CREATION = '''
 adduser --gecos "{user}" --disabled-password {user} < /dev/null
 install -d -o {user} -g {user} -m 700  ~{user}/.ssh
 echo "{pubkey}" > ~{user}/.ssh/authorized_keys
 chmod 600 ~{user}/.ssh/authorized_keys
 chown {user}:{user} ~{user}/.ssh/authorized_keys
-
 for grp in {auth_groups}; do
     adduser "{user}" "$grp"
 done
-
 '''
+
+
+def show_commits(old_id, new_id, dirs, cwd):
+    cmd = ['git', '--no-pager', 'shortlog', '--no-merges', old_id + '..' + new_id]
+    if dirs:
+        cmd.append('--')
+        cmd.extend(dirs)
+    subprocess.call(cmd, cwd=cwd)
 
 
 def mk_sshuser_script(user, auth_groups, pubkey):
@@ -91,10 +91,10 @@ class VmCmd:
 
     TAKEOVER_PREPARE_PRIMARY: str = 'takeover_prepare_primary'
     TAKEOVER_PREPARE_SECONDARY: str = 'takeover_prepare_secondary'
-    TAKEOVER_FINISH_PRIMARY:str = 'takeover_finish_primary'
-    TAKEOVER_FINISH_SECONDARY:str  = 'takeover_finish_secondary'
+    TAKEOVER_FINISH_PRIMARY: str = 'takeover_finish_primary'
+    TAKEOVER_FINISH_SECONDARY: str  = 'takeover_finish_secondary'
 
-    DROP_NODE_PREPARE:str = 'drop_node_prepare'
+    DROP_NODE_PREPARE: str = 'drop_node_prepare'
 
 class VmState:
     PRIMARY: str = 'primary'
