@@ -480,10 +480,11 @@ class VmTool(EnvScript):
                 vlist = []
                 cnt = 0
                 for val in self.pricing_iter_attribute_values(ServiceCode=code, AttributeName=att):
+                    if cnt > 100:
+                        vlist.append('...')
+                        break
                     vlist.append(val['Value'])
                     cnt += 1
-                    if cnt > 40:
-                        break
                 print('%s.%s = %r' % (code, att, vlist))
 
     def route53_iter_rrsets(self, **kwargs):
