@@ -377,7 +377,7 @@ class VmTool(EnvScript):
             if self._endpoints['version'] != 3:
                 raise Exception("unsupported endpoints version: %d" % self._endpoints['version'])
         for part in self._endpoints['partitions']:
-            if part['partition'] == 'aws':
+            if part['partition'] == 'aws': # aws, aws-us-gov, aws-cn
                 return part['regions'][region]['description']
         raise Exception("did not find 'aws' partition")
 
@@ -393,6 +393,12 @@ class VmTool(EnvScript):
 
     def get_cached_pricing(self, **kwargs):
         """Fetch pricing for single product, cache based on filter.
+
+        ServiceCode=AmazonEC2
+            productFamily
+                CPU Credits, Compute Instance (bare metal), Compute Instance, Data Transfer, Dedicated Host,
+                Elastic Graphics, Fee, IP Address, Load Balancer-Application, Load Balancer-Network, Load Balancer,
+                NAT Gateway, Storage Snapshot, Storage, System Operation
         """
         filters = []
         for k, v in kwargs.items():
@@ -400,7 +406,7 @@ class VmTool(EnvScript):
         cache_key = json.dumps(kwargs, sort_keys=True)
         if cache_key not in self._pricing_cache:
             res = []
-            for rec in self.pricing_iter_products(FormatVersion='aws_v1', ServiceCode='AmazonEC2', Filters=filters):
+            for rec in self.pricing_iter_products(FormatVersion='aws_v1', ServiceCode=kwargs.get('ServiceCode'), Filters=filters):
                 res.append(rec)
             if len(res) != 1:
                 raise UsageError("Broken pricing filter: expect 1 row, got %d" % len(res))
@@ -445,11 +451,11 @@ class VmTool(EnvScript):
             locationType='AWS Region',
             location=self.get_region_desc(region),
             productFamily='Compute Instance',
-            instanceType=vmtype,
             preInstalledSw='NA',        # NA, SQL Ent, SQL Std, SQL Web
             operatingSystem='Linux',    # NA, Linux, RHEL, SUSE, Windows
             tenancy='Shared',           # NA, Dedicated, Host, Reserved, Shared
-            capacitystatus='Used')      # NA, Used, AllocatedCapacityReservation, AllocatedHost, UnusedCapacityReservation
+            capacitystatus='Used',      # NA, Used, AllocatedCapacityReservation, AllocatedHost, UnusedCapacityReservation
+            instanceType=vmtype)
 
         return {
             'onDemandHourly': loadOnDemand(vmdata),
@@ -472,11 +478,15 @@ class VmTool(EnvScript):
         return self.get_offer_price(offers[0], 'GB-Mo')
 
     def cmd_debug_pricing(self):
-        svclist = list(self.pricing_iter_services(ServiceCode="AmazonEC2"))
-        print(json.dumps(svclist, indent=2))
+        svcNames = [svc['ServiceCode'] for svc in self.pricing_iter_services()]
+        print('ServiceCode=%s' % svcNames)
+
+        svclist = list(self.pricing_iter_services(ServiceCode='AmazonEC2'))
+        print('%s=%s' % (svclist[0]['ServiceCode'], json.dumps(svclist[0], indent=2)))
+
         for svc in svclist:
             code = svc['ServiceCode']
-            for att in svc['AttributeNames']:
+            for att in sorted(svc['AttributeNames']):
                 vlist = []
                 cnt = 0
                 for val in self.pricing_iter_attribute_values(ServiceCode=code, AttributeName=att):
