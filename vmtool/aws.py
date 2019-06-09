@@ -333,7 +333,7 @@ class VmTool(EnvScript):
 
         def pager(**kwargs):
             for page in lister.paginate(**kwargs):
-                for rec in page[rname]:
+                for rec in page.get(rname) or []:
                     yield rec
         return pager
 
@@ -346,6 +346,12 @@ class VmTool(EnvScript):
 
     def ec2_iter(self, func, result, region=None, **kwargs):
         client = self.get_ec2_client(region)
+        pager = self.pager(client, func, result)
+        for rec in pager(**kwargs):
+            yield rec
+
+    def s3_iter(self, func, result, region=None, **kwargs):
+        client = self.get_s3(region)
         pager = self.pager(client, func, result)
         for rec in pager(**kwargs):
             yield rec
@@ -390,6 +396,26 @@ class VmTool(EnvScript):
             'sc1': 'Cold HDD',
         }
         return VMAP[vol_type]
+
+    def get_storage_filter(self, storage_class):
+        """Return filter for pricing query.
+        """
+        #storageClass: ['Archive', 'General Purpose', 'Infrequent Access', 'Intelligent-Tiering', 'Non-Critical Data', 'Staging', 'Tags']
+        #volumeType: ['Amazon Glacier', 'Glacier Deep Archive', 'Intelligent-Tiering Frequent Access',
+        #             'Intelligent-Tiering Infrequent Access', 'Intelligent-Tiering', 'One Zone - Infrequent Access',
+        #             'Reduced Redundancy', 'Standard - Infrequent Access', 'Standard', 'Tags']
+        STORAGE_FILTER = {
+            'STANDARD': {'volumeType': 'Standard'},
+            'STANDARD_IA': {'volumeType': 'Standard - Infrequent Access'},
+            'ONEZONE_IA': {'volumeType': 'One Zone - Infrequent Access'},
+            'GLACIER': {'volumeType': 'Amazon Glacier'},
+            # deprecated
+            'REDUCED_REDUNDANCY': {'volumeType': 'Reduced Redundancy'},
+            # missing from pricing data
+            'DEEP_ARCHIVE': {'volumeType': 'Glacier Deep Archive'},
+            'INTELLIGENT_TIERING': {'storageClass': 'Intelligent-Tiering'},
+        }
+        return STORAGE_FILTER[storage_class]
 
     def get_cached_pricing(self, **kwargs):
         """Fetch pricing for single product, cache based on filter.
@@ -476,6 +502,40 @@ class VmTool(EnvScript):
         if len(offers) != 1:
             raise Exception('expected one value, got %d' % len(offers))
         return self.get_offer_price(offers[0], 'GB-Mo')
+
+    def get_s3_pricing(self, region, storage_class, size):
+        """Return numeric price for volume cost.
+        """
+        p = self.get_cached_pricing(
+            ServiceCode='AmazonS3',
+            locationType='AWS Region',
+            location=self.get_region_desc(region),
+            productFamily='Storage',
+            **self.get_storage_filter(storage_class))
+
+        offers = list(p['terms']['OnDemand'].values())
+        if len(offers) != 1:
+            raise Exception('expected one value, got %d' % len(offers))
+
+        # S3 prices are in segments
+        total = 0
+        for pdim in offers[0]['priceDimensions'].values():
+            if pdim['unit'] != 'GB-Mo':
+                raise Exception('expected GB-Mo, got %s' % pdim['unit'])
+            beginRange = int(pdim['beginRange'])
+            if pdim['endRange'] != 'Inf':
+                endRange = int(pdim['endRange'])
+            else:
+                endRange = size
+
+            if size < beginRange:
+                continue
+            elif size > endRange:
+                curblk = endRange - beginRange
+            else:
+                curblk = size - beginRange
+            total += curblk * float(pdim['pricePerUnit']['USD'])
+        return total
 
     def cmd_debug_pricing(self):
         svcNames = [svc['ServiceCode'] for svc in self.pricing_iter_services()]
@@ -1338,6 +1398,39 @@ class VmTool(EnvScript):
                 for vol_id in vol_map:
                     if vol_id not in gotVol:
                         printf("! Lost volume: %s", vol_id)
+
+    def cmd_show_s3cost(self):
+        """Show S3 cost.
+
+        Group: pricing
+        """
+
+        def show(name, info):
+            line = ['%-30s' % name]
+            for k, v in info.items():
+                gbs = int(v / (1024*1024))
+                total = self.get_s3_pricing(region, k, gbs)
+                line.append('%s=%d ($%d/m)' % (k, int(gbs), total))
+            print(' '.join(line))
+
+        all_regions = self.cf.getlist('all_regions')
+        for region in all_regions:
+            printf('-- %s --', region)
+            totals = {}
+            for bucket in self.get_s3(region).list_buckets()['Buckets']:
+                bucket_name = bucket['Name']
+                bucket_info = {}
+                for obj in self.s3_iter('list_object_versions', 'Versions', region=region, Bucket=bucket_name):
+                    # Size, StorageClass, IsLatest, LastModified
+                    sclass = obj['StorageClass']
+                    size = obj['Size'] # round to block?
+                    bucket_info[sclass] = bucket_info.get(sclass, 0) + size
+                if not bucket_info:
+                    continue
+                for k, v in bucket_info.items():
+                    totals[k] = totals.get(k, 0) + v
+                show(bucket_name, bucket_info)
+            show('* total *', totals)
 
     def cmd_show_untagged(self):
         """Show VMs without tags.
