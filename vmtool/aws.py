@@ -119,6 +119,7 @@ class VmTool(EnvScript):
 
     new_commit = None
     old_commit = None
+    availability_zone = None
 
     log = logging.getLogger('vmtool')
 
@@ -172,6 +173,11 @@ class VmTool(EnvScript):
         self._region = self.cf.get('region')
         self.ssh_known_hosts = os.path.join(self.ssh_dir, 'known_hosts')
         self.is_live = self.cf.getint('is_live', 0)
+
+        if self.options.az is not None:
+            self.availability_zone = self.options.az
+        else:
+            self.availability_zone = self.cf.getint('availability_zone', 0)
 
     def load_gpg_file(self, fn):
         if self.options.verbose:
@@ -265,7 +271,7 @@ class VmTool(EnvScript):
         p.add_argument("--ssh-key", help="Use different SSH key")
         p.add_argument("--all-role-vms", action="store_true", help="Run command on all vms for role")
         p.add_argument("--running", action="store_true", help="Show only running instances")
-        p.add_argument("--az", type=int, default=0, help="Set availability zone")
+        p.add_argument("--az", type=int, help="Set availability zone")
         return p
 
     def get_boto3_session(self, region=None):
@@ -1942,7 +1948,7 @@ class VmTool(EnvScript):
         time_printf("AWS=%s Env=%s Role=%s Key=%s Image=%s(%s) AZ=%d",
                     self.cf.get('aws_main_account'),
                     self.env_name, self.role_name or '-', key_name,
-                    image_name, image_id, self.options.az)
+                    image_name, image_id, self.availability_zone)
 
         time_printf("Creating VM, storage: %s" % ', '.join(devlog))
 
@@ -2364,9 +2370,9 @@ class VmTool(EnvScript):
         val = tf_load_output_var(state_file, arg)
         if not isinstance(val, list):
             raise UsageError("TFAZ function expects list param: %s" % kname)
-        if self.options.az < 0 or self.options.az >= len(val):
+        if self.availability_zone < 0 or self.availability_zone >= len(val):
             raise UsageError("AZ value out of range")
-        return val[self.options.az]
+        return val[self.availability_zone]
 
     def conf_func_primary_vm(self, arg, sect, kname):
         """Lookup primary vm.
