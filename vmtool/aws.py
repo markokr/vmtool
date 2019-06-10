@@ -1431,8 +1431,6 @@ class VmTool(EnvScript):
                     sclass = obj['StorageClass']
                     size = obj['Size'] # round to block?
                     bucket_info[sclass] = bucket_info.get(sclass, 0) + size
-                if not bucket_info:
-                    continue
                 for k, v in bucket_info.items():
                     totals[k] = totals.get(k, 0) + v
                 show(bucket_name, bucket_info)
