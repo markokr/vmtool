@@ -1408,7 +1408,7 @@ class VmTool(EnvScript):
         def show(name, info):
             line = ['%-30s' % name]
             for k, v in info.items():
-                gbs = int(v / (1024*1024))
+                gbs = int(v / (1024*1024*1024))
                 total = self.get_s3_pricing(region, k, gbs)
                 line.append('%s=%d ($%d/m)' % (k, int(gbs), total))
             print(' '.join(line))
