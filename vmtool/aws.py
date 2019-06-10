@@ -589,8 +589,9 @@ class VmTool(EnvScript):
 
         vm_list = sorted(vm_list, key=lambda vm: vm['LaunchTime'])
 
+        extra_verbose = self.options.verbose and self.options.verbose > 1
         vol_map = {}
-        if self.options.verbose:
+        if extra_verbose:
             vol_map = self.get_volume_map(vm_list)
 
         for vm in vm_list:
@@ -660,15 +661,25 @@ class VmTool(EnvScript):
                     if tag['Key'] == tagname:
                         tags += ' %s=%s' % (tagname, tag['Value'])
 
+            az = vm['Placement']['AvailabilityZone']
+            if az[-2].isdigit() and az[-1].islower():
+                name += ' AZ=%d' % (ord(az[-1]) - ord('a'))
+            else:
+                name += ' AZ=%s' % az
+
             int_ip = ''
             if vm.get('PrivateIpAddress'):
                 int_ip = ' ip=%s' % vm['PrivateIpAddress']
 
             # one-line output
             printf("%s [%s%s%s]%s%s%s%s", vm['InstanceId'], c1, vm['State']['Name'], c2, name, tags, int_ip, eip)
-            for xln in extra_lines:
-                printf('  %s', xln)
-            if not self.options.verbose:
+
+            if self.options.verbose and extra_lines:
+                for xln in extra_lines:
+                    printf('  %s', xln)
+                printf('')
+
+            if not extra_verbose:
                 continue
 
             # verbose output
@@ -719,7 +730,7 @@ class VmTool(EnvScript):
                 if ebs:
                     vols.add(ebs['VolumeId'])
 
-        printf("get_volume_map: %r", vols)
+        #printf("get_volume_map: %r", vols)
         for vol in self.ec2_iter('describe_volumes', 'Volumes', VolumeIds=list(vols)):
             vmap[vol['VolumeId']] = vol
         return vmap
@@ -2348,8 +2359,6 @@ class VmTool(EnvScript):
         Usage: ${TF ! tfvar}
         """
         state_file = self.cf.get('tf_state_file')
-        if self.options.verbose:
-            printf("TF: %s", arg)
         val = tf_load_output_var(state_file, arg)
         if isinstance(val, list):
             raise UsageError("TF function got list param: %s" % kname)

@@ -68,7 +68,7 @@ class EnvScript(object):
             sys.exit(0)
         if self.options.quiet:
             self.log_level = logging.WARNING
-        if self.options.verbose:
+        if self.options.verbose and self.options.verbose > 2:
             self.log_level = logging.DEBUG
 
         # init logging
