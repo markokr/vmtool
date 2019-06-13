@@ -1099,7 +1099,7 @@ class VmTool(EnvScript):
             #elif vm.get('PublicIpAddress') in dns_map:
             #    return vm
 
-        raise UsageError("VM not found")
+        raise UsageError("Primary VM not found: %s" % role_name)
 
     def get_primary_vms(self):
         ec2 = self.get_ec2_client()
