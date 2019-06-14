@@ -978,44 +978,23 @@ class VmTool(EnvScript):
                 ssh_add_known_host(self.ssh_known_hosts, dns, ip, k, v, vm_id)
 
     def get_env_filters(self):
+        """Return default filters based on command-line swithces.
+        """
+        return self.make_env_filters(role_name=self.role_name, running=self.options.running, allenvs=self.options.all)
+
+    def make_env_filters(self, role_name=None, running=True, allenvs=False):
+        """Return filters for instance listing.
+        """
         filters = []
 
-        if self.options.running:
-            filters.append({
-                'Name': 'instance-state-name',
-                'Values': ['running']
-            })
-
-        if not self.options.all:
-            filters.append({
-                'Name': 'tag:Env',
-                'Values': [self.env_name],
-            })
-            if self.role_name:
-                filters.append({
-                    'Name': 'tag:Role',
-                    'Values': [self.role_name],
-                })
-        return filters
-
-    def make_env_filters(self, role_name=None, running=True):
-        filters = []
-
-        filters.append({
-            'Name': 'tag:Env',
-            'Values': [self.env_name],
-        })
-
-        filters.append({
-            'Name': 'tag:Role',
-            'Values': [role_name or self.role_name],
-        })
+        if not allenvs:
+            filters.append({'Name': 'tag:Env', 'Values': [self.env_name]})
+            if role_name or self.role_name:
+                filters.append({'Name': 'tag:Role', 'Values': [role_name or self.role_name]})
 
         if running:
-            filters.append({
-                'Name': 'instance-state-name',
-                'Values': ['running']
-            })
+            filters.append({'Name': 'instance-state-name', 'Values': ['running']})
+
         return filters
 
 
@@ -1024,7 +1003,7 @@ class VmTool(EnvScript):
 
         if not role_name:
             role_name = self.role_name
-        filters = self.make_env_filters(role_name)
+        filters = self.make_env_filters(role_name=role_name, running=True)
 
         for vm in self.ec2_iter_instances(Filters=filters):
             if not self._check_tags(vm.get('Tags'), force_role=True, role_name=role_name):
@@ -1083,7 +1062,7 @@ class VmTool(EnvScript):
         return main_vms
 
     def get_primary_for_role(self, role_name, instance_id=None):
-        filters = self.make_env_filters(role_name)
+        filters = self.make_env_filters(role_name=role_name, running=True)
         dns_map = self.get_dns_map(True)
         for vm in self.ec2_iter_instances(Filters=filters):
             if not self._check_tags(vm.get('Tags'), role_name=role_name, force_role=True):
