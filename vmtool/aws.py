@@ -290,21 +290,17 @@ class VmTool(EnvScript):
 
     def get_boto3_client(self, svc, region=None):
         if svc == 'pricing':
-            region = 'us-east-1'
+            region = 'us-east-1'    # provided only in 'us-east-1' and 'ap-south-1'
         elif not region:
             region = self._region
         if self._boto_clients is None:
             self._boto_clients = {}
 
         scode = (region, svc)
-        if scode in self._boto_clients:
-            client = self._boto_clients[scode]
-        else:
+        if scode not in self._boto_clients:
             session = self.get_boto3_session(region)
-            client = session.client(svc)
-            self._boto_clients[scode] = client
-
-        return client
+            self._boto_clients[scode] = session.client(svc)
+        return self._boto_clients[scode]
 
     def get_elb(self, region=None):
         """Get cached ELB connection.
