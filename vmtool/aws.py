@@ -407,13 +407,13 @@ class VmTool(EnvScript):
         #             'Intelligent-Tiering Infrequent Access', 'Intelligent-Tiering', 'One Zone - Infrequent Access',
         #             'Reduced Redundancy', 'Standard - Infrequent Access', 'Standard', 'Tags']
         STORAGE_FILTER = {
-            'STANDARD': {'volumeType': 'Standard'},
-            'STANDARD_IA': {'volumeType': 'Standard - Infrequent Access'},
-            'ONEZONE_IA': {'volumeType': 'One Zone - Infrequent Access'},
-            'GLACIER': {'volumeType': 'Amazon Glacier'},
+            'STANDARD': {'productFamily': 'Storage', 'volumeType': 'Standard'},
+            'STANDARD_IA': {'productFamily': 'Storage', 'volumeType': 'Standard - Infrequent Access'},
+            'ONEZONE_IA': {'productFamily': 'Storage', 'volumeType': 'One Zone - Infrequent Access'},
+            'GLACIER': {'productFamily': 'Storage', 'volumeType': 'Amazon Glacier'},
             # deprecated
-            'REDUCED_REDUNDANCY': {'volumeType': 'Reduced Redundancy'},
-            # missing from pricing data
+            'REDUCED_REDUNDANCY': {'productFamily': 'Storage', 'volumeType': 'Reduced Redundancy'},
+            # buggy pricing data
             'DEEP_ARCHIVE': {'volumeType': 'Glacier Deep Archive'},
             'INTELLIGENT_TIERING': {'storageClass': 'Intelligent-Tiering'},
         }
@@ -512,7 +512,6 @@ class VmTool(EnvScript):
             ServiceCode='AmazonS3',
             locationType='AWS Region',
             location=self.get_region_desc(region),
-            productFamily='Storage',
             **self.get_storage_filter(storage_class))
 
         offers = list(p['terms']['OnDemand'].values())
