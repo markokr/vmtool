@@ -1396,7 +1396,7 @@ class VmTool(EnvScript):
         Group: pricing
         """
 
-        def show(name, info):
+        def show(name, info, region):
             line = ['%-30s' % name]
             for k, v in info.items():
                 gbs = int(v / (1024*1024*1024))
@@ -1418,8 +1418,8 @@ class VmTool(EnvScript):
                     bucket_info[sclass] = bucket_info.get(sclass, 0) + size
                 for k, v in bucket_info.items():
                     totals[k] = totals.get(k, 0) + v
-                show(bucket_name, bucket_info)
-            show('* total *', totals)
+                show(bucket_name, bucket_info, region)
+            show('* total *', totals, region)
 
     def cmd_show_untagged(self):
         """Show VMs without tags.
