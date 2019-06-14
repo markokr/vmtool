@@ -1,26 +1,26 @@
 """AWS backend for vmtool.
 """
 
-import sys
-import os
-import os.path
-import subprocess
-import time
-import logging
-import socket
-import io
-import tarfile
-import uuid
-import shlex
-import re
-import gzip
-import json
-import stat
-import ipaddress
+import argparse
+import binascii
 import datetime
 import errno
-import binascii
-import argparse
+import gzip
+import io
+import ipaddress
+import json
+import logging
+import os
+import os.path
+import re
+import shlex
+import socket
+import stat
+import subprocess
+import sys
+import tarfile
+import time
+import uuid
 
 from fnmatch import fnmatch
 
@@ -28,16 +28,16 @@ import boto3.session
 import boto3.s3.transfer
 import botocore.session
 
-from vmtool.util import ssh_add_known_host, parse_console, rsh_quote, as_unicode
-from vmtool.util import printf, eprintf, time_printf, print_json, local_cmd, run_successfully
-from vmtool.util import encode_base64, fmt_dur
-from vmtool.xglob import xglob
-from vmtool.tarfilter import TarFilter
-from vmtool.scripting import EnvScript, UsageError
-from vmtool.envconfig import load_env_config, find_gittop
-from vmtool.config import Config, NoOptionError
-from vmtool.terra import tf_load_output_var, tf_load_all_vars
 from vmtool.certs import load_cert_config
+from vmtool.config import Config, NoOptionError
+from vmtool.envconfig import load_env_config, find_gittop
+from vmtool.scripting import EnvScript, UsageError
+from vmtool.tarfilter import TarFilter
+from vmtool.terra import tf_load_output_var, tf_load_all_vars
+from vmtool.util import encode_base64, fmt_dur
+from vmtool.util import printf, eprintf, time_printf, print_json, local_cmd, run_successfully
+from vmtool.util import ssh_add_known_host, parse_console, rsh_quote, as_unicode
+from vmtool.xglob import xglob
 
 
 # /usr/share/doc/cloud-init/userdata.txt
