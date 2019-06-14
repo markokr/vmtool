@@ -1904,7 +1904,7 @@ class VmTool(EnvScript):
         if not zone:
             zone = None
         ebs_optimized = self.cf.getboolean('ebs_optimized', False)
-        disk_type = self.cf.get('disk_type', 'standard')
+        disk_type = self.cf.get('disk_type', 'gp2')
 
         disk_map = self.cf.getdict('disk_map', {})
         if not disk_map:
