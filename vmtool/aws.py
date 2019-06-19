@@ -167,6 +167,7 @@ class VmTool(EnvScript):
             'PRIMARY_VM': self.conf_func_primary_vm,
             'NETWORK': self.conf_func_network,
             'NETMASK': self.conf_func_netmask,
+            'MEMBERS': self.conf_func_members,
         })
         self.process_pkgs()
 
@@ -2339,6 +2340,42 @@ class VmTool(EnvScript):
         # work around tf dots in route53 data
         val = val.strip().rstrip('.')
         return val
+
+    def conf_func_members(self, arg, sect, kname):
+        """Returns field that match patters.
+
+        Usage: ${MEMBERS ! field : pat : fn}
+        """
+        field, pats, bfn = arg.split(':')
+        fn = os.path.join(self.keys_dir, bfn.strip())
+        if not os.path.isfile(fn):
+            raise UsageError('%s - MEMBERS file missing: %s' % (kname, fn))
+
+        idx = int(field, 10)
+
+        findLabels = []
+        for p in pats.split(','):
+            p = p.strip()
+            if p:
+                findLabels.append(p)
+
+        res = []
+        for ln in open(fn):
+            ln = ln.strip()
+            if not ln or ln[0] == '#':
+                continue
+            got = False
+            parts = ln.split(':')
+            user = parts[0].strip()
+            for label in parts[idx].split(','):
+                label = label.strip()
+                if label and label in findLabels:
+                    got = True
+                    break
+            if got and user not in res:
+                res.append(user)
+
+        return ', '.join(res)
 
     def conf_func_tfaz(self, arg, sect, kname):
         """Returns key from Terraform state file.
