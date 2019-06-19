@@ -2344,9 +2344,9 @@ class VmTool(EnvScript):
     def conf_func_members(self, arg, sect, kname):
         """Returns field that match patters.
 
-        Usage: ${MEMBERS ! field : pat : fn}
+        Usage: ${MEMBERS ! pat : fn : field}
         """
-        field, pats, bfn = arg.split(':')
+        pats, bfn, field = arg.split(':')
         fn = os.path.join(self.keys_dir, bfn.strip())
         if not os.path.isfile(fn):
             raise UsageError('%s - MEMBERS file missing: %s' % (kname, fn))
