@@ -153,13 +153,18 @@ class Config(object):
         if not s:
             return res
         for kv in s.split(","):
+            kv = kv.strip()
+            if not kv:
+                continue
             tmp = kv.split(':', 1)
             if len(tmp) > 1:
                 k = tmp[0].strip()
                 v = tmp[1].strip()
             else:
-                k = kv.strip()
+                k = kv
                 v = k
+            if k in res:
+                raise KeyError('Duplicate key not allowed: %r' % k)
             res[k] = v
         return res
 
