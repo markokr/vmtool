@@ -1077,11 +1077,16 @@ class VmTool(EnvScript):
         raise UsageError("Primary VM not found: %s" % role_name)
 
     def get_primary_vms(self):
-        ec2 = self.get_ec2_client()
-
         if self.options.all_role_vms:
             return self.get_all_role_vms()
+        main_vms = self._get_primary_vms()
+        if main_vms:
+            eprintf("Primary VM for %s is %s", self.full_role, ','.join(main_vms))
+            return main_vms
+        raise UsageError("Primary VM not found")
 
+    def _get_primary_vms(self):
+        ec2 = self.get_ec2_client()
         eip = self.cf.get('domain_eip', '')
         main_vms = []
         if eip:
@@ -1097,10 +1102,7 @@ class VmTool(EnvScript):
                     main_vms.append(addr['InstanceId'])
                     break
 
-            if main_vms:
-                eprintf("Primary VM for %s is %s", self.full_role, ','.join(main_vms))
-                return main_vms
-            raise UsageError("Primary VM not found")
+            return main_vms
 
         dnsmap = self.get_dns_map()
         for vm in self.ec2_iter_instances(Filters=self.get_env_filters()):
@@ -1112,21 +1114,26 @@ class VmTool(EnvScript):
                 main_vms.append(vm['InstanceId'])
             elif vm.get('PublicIpAddress') in dnsmap:
                 main_vms.append(vm['InstanceId'])
-        if not main_vms:
-            raise UsageError("Primary VM not found")
-        eprintf("Primary VM for %s is %s", self.full_role, ','.join(main_vms))
         return main_vms
 
     def get_all_role_vms(self):
         if not self.role_name:
             raise UsageError("Not in a role-based env")
+
+        main_vms = self._get_primary_vms()
+
         all_vms = []
         for vm in self.ec2_iter_instances(Filters=self.get_env_filters()):
             if not self._check_tags(vm.get('Tags'), True):
                 continue
             if vm['State']['Name'] != 'running':
                 continue
-            all_vms.append(vm['InstanceId'])
+
+            # prepend primary vms
+            if vm['InstanceId'] in main_vms:
+                all_vms.insert(0, vm['InstanceId'])
+            else:
+                all_vms.append(vm['InstanceId'])
         if not all_vms:
             raise UsageError("VMs not found")
         eprintf("Running VMs for %s: %s", self.full_role, ' '.join(all_vms))
