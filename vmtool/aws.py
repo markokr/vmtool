@@ -1884,9 +1884,14 @@ class VmTool(EnvScript):
             val = disk_map[dev]
             local = {}
             for opt in val.split(':'):
-                k, v = opt.split('=')
-                k = k.strip()
-                v = v.strip()
+                if '=' in opt:
+                    k, v = opt.split('=', 1)
+                    k = k.strip()
+                    v = v.strip()
+                else:
+                    k = v = opt.strip()
+                    if not k:
+                        continue
                 if k == 'size':
                     v = int(v)
                 local[k] = v
@@ -1969,6 +1974,14 @@ class VmTool(EnvScript):
                     bdev['VirtualName'] = v
                 elif k == 'encrypted':
                     ebs['Encrypted'] = bool(int(v))
+                elif k in ('standard', 'gp2', 'st1', 'sc1', 'io1'):
+                    ebs['VolumeType'] = k
+                elif k in ('enc-standard', 'enc-gp2', 'enc-st1', 'enc-sc1', 'enc-io1'):
+                    ebs['VolumeType'] = k.split('-')[1]
+                    ebs['Encrypted'] = True
+                else:
+                    eprintf("ERROR: unknown disk param: %r", k)
+                    sys.exit(1)
 
             if ebs:
                 if 'VolumeSize' not in ebs:
