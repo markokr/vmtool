@@ -70,6 +70,9 @@ for grp in {auth_groups}; do
 done
 '''
 
+# replace those with root specified by image
+ROOT_DEV_NAMES = ('root', 'xvda')
+
 
 def show_commits(old_id, new_id, dirs, cwd):
     cmd = ['git', '--no-pager', 'shortlog', '--no-merges', old_id + '..' + new_id]
@@ -179,6 +182,20 @@ class VmTool(EnvScript):
             self.availability_zone = self.options.az
         else:
             self.availability_zone = self.cf.getint('availability_zone', 0)
+
+        # fill vm_ordered_disk_names
+        disk_map = self.get_disk_map()
+        if disk_map:
+            api_order = []
+            size_order = []
+            for dev in disk_map:
+                size = disk_map[dev].get('size')
+                if size and dev not in ROOT_DEV_NAMES:
+                    size_order.append( (size, dev) )
+                    api_order.append(dev)
+            size_order.sort()
+            self.cf.set('vm_disk_names_size_order', ', '.join([elem[1] for elem in size_order]))
+            self.cf.set('vm_disk_names_api_order', ', '.join(api_order))
 
     def load_gpg_file(self, fn):
         if self.options.verbose:
@@ -1855,6 +1872,38 @@ class VmTool(EnvScript):
         self.vm_create_finish(ids)
         return ids
 
+    def get_disk_map(self):
+        """Parse disk_map option.
+        """
+        disk_map = self.cf.getdict('disk_map', {})
+        if not disk_map:
+            disk_map = {'root': 'size=12'}
+
+        res_map = {}
+        for dev in disk_map:
+            val = disk_map[dev]
+            local = {}
+            for opt in val.split(':'):
+                k, v = opt.split('=')
+                k = k.strip()
+                v = v.strip()
+                if k == 'size':
+                    v = int(v)
+                local[k] = v
+            res_map[dev] = local
+        return res_map
+
+    def get_next_raw_device(self, base_dev, used):
+        prefix = base_dev[:-1]
+        last = ord(base_dev[-1])
+        while chr(last) <= 'z':
+            current_dev = '%s%c' % (prefix, last)
+            if current_dev not in used:
+                used.add(current_dev)
+                return current_dev
+            last += 1
+        raise Exception('Failed to generate disk name: %r used=%r' % (base_dev, used_list))
+
     def vm_create_start(self):
         """Create instance.
 
@@ -1888,12 +1937,11 @@ class VmTool(EnvScript):
         ebs_optimized = self.cf.getboolean('ebs_optimized', False)
         disk_type = self.cf.get('disk_type', 'gp2')
 
-        disk_map = self.cf.getdict('disk_map', {})
+        disk_map = self.get_disk_map()
         if not disk_map:
-            disk_map = {'xvda': 'size=12'}
+            disk_map = {'root': {'size': 12}}
 
         # device name may be different for different AMIs
-        root_device_name = 'xvda'
         res = client.describe_images(ImageIds=[image_id])
         if not res.get('Images'):
             eprintf("ERROR: no image: %r" % image_id)
@@ -1903,25 +1951,16 @@ class VmTool(EnvScript):
 
         devlog = []
         bdm = []
-        klist = sorted(disk_map.keys())
-        for dev in klist:
-            val = disk_map[dev]
-            ebs = {}
+
+        used_raw_devs = set()
+
+        for dev in disk_map:
             bdev = {'DeviceName': dev}
 
-            # seems something (ubuntu image?) overrides it otherwise
-            if dev == 'xvda' and root_device_name != dev:
-                bdev['DeviceName'] = root_device_name
-
-            for opt in val.split(':'):
-                k, v = opt.split('=')
-                k = k.strip()
-                v = v.strip()
+            ebs = {}
+            for k, v in disk_map[dev].items():
                 if k == 'size':
-                    ebs['DeleteOnTermination'] = True
                     ebs['VolumeSize'] = int(v)
-                    if 'VolumeType' not in ebs:
-                        ebs['VolumeType'] = disk_type
                 elif k == 'type':
                     # https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/EBSVolumeTypes.html
                     # Values: standard, gp2, io1, st1, sc1
@@ -1930,11 +1969,31 @@ class VmTool(EnvScript):
                     bdev['VirtualName'] = v
                 elif k == 'encrypted':
                     ebs['Encrypted'] = bool(int(v))
+
             if ebs:
+                if 'VolumeSize' not in ebs:
+                    ebs['VolumeSize'] = 10
+                if 'VolumeType' not in ebs:
+                    ebs['VolumeType'] = disk_type
+                ebs['DeleteOnTermination'] = True
+
                 bdev['Ebs'] = ebs
+
+            # fill DeviceName, mainly used for root selection, otherwise mostly useless
+            if dev in ROOT_DEV_NAMES:
+                bdev['DeviceName'] = root_device_name
+                if root_device_name in ['/dev/sda1']:
+                    used_raw_devs.add(root_device_name[:-1])
+                else:
+                    used_raw_devs.add(root_device_name)
+            elif ebs:
+                bdev['DeviceName'] = self.get_next_raw_device('/dev/sdf', used_raw_devs)
+            else:
+                bdev['DeviceName'] = self.get_next_raw_device('/dev/sdb', used_raw_devs)
+
             bdm.append(bdev)
 
-            devlog.append(dev)
+            devlog.append('%s=%s' % (dev, bdev['DeviceName']))
 
         time_printf("AWS=%s Env=%s Role=%s Key=%s Image=%s(%s) AZ=%d",
                     self.cf.get('aws_main_account'),
