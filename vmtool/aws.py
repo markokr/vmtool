@@ -1973,6 +1973,8 @@ class VmTool(EnvScript):
                 elif k == 'local':
                     bdev['VirtualName'] = v
                 elif k == 'encrypted':
+                    if v == 'encrypted':
+                        v = '1'
                     ebs['Encrypted'] = bool(int(v))
                 elif k in ('standard', 'gp2', 'st1', 'sc1', 'io1'):
                     ebs['VolumeType'] = k
