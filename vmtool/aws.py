@@ -873,7 +873,12 @@ class VmTool(EnvScript):
                 vm_id = primary_id = self.get_primary_vms()[0]
             vm = self.vm_lookup(vm_id)
             self.put_known_host_from_tags(vm_id)
-            a = "%s:%s" % (vm.get('PublicIpAddress'), t[1])
+            vm = self.vm_lookup(vm_id)
+            if self.cf.getboolean('ssh_internal_ip_works', False):
+                hostname = vm.get('PrivateIpAddress')
+            else:
+                hostname = vm.get('PublicIpAddress')
+            a = "%s:%s" % (hostname, t[1])
             nargs.append(a)
             ids.append(vm_id)
 
