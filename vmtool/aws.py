@@ -2421,10 +2421,19 @@ class VmTool(EnvScript):
         """
         state_file = self.cf.get('tf_state_file')
         val = tf_load_output_var(state_file, arg)
-        if isinstance(val, list):
-            raise UsageError("TF function got list param: %s" % kname)
-        # work around tf dots in route53 data
-        val = val.strip().rstrip('.')
+
+        # configparser expects strings
+        if isinstance(val, str):
+            # work around tf dots in route53 data
+            val = val.strip().rstrip('.')
+        elif isinstance(val, int):
+            val = str(val)
+        elif isinstance(val, float):
+            val = repr(val)
+        elif isinstance(val, bool):
+            val = str(val).lower()
+        else:
+            raise UsageError("TF function got invalid type: %s - %s" % (kname, type(val)))
         return val
 
     def conf_func_members(self, arg, sect, kname):
