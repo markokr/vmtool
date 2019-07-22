@@ -12,10 +12,8 @@ def tf_load_output_var(state_file, name):
         raise KeyError('%s: TF module does not have output: %s' % (state_file, name))
     return keys[name]
 
-
-def tf_load_all_vars(state_file):
+def _load_state_v3(state):
     res = {}
-    state = json.load(open(state_file))
     for mod in state['modules']:
         path = mod['path']
         if path == ['root']:
@@ -34,4 +32,27 @@ def tf_load_all_vars(state_file):
                 fqname = 'module.%s.%s' % (mpath, keyname)
                 res[fqname] = modvars[keyname]['value']
     return res
+
+def flatten(dst, k, v):
+    if isinstance(v, dict):
+        for kx, vx in v.items():
+            flatten(dst, '%s.%s' % (k, kx), vx)
+    else:
+        dst[k] = v
+    return dst
+
+def _load_state_v4(state):
+    res = {}
+    for k, v in state['outputs'].items():
+        flatten(res, k, v['value'])
+    return res
+
+def tf_load_all_vars(state_file):
+    res = {}
+    state = json.load(open(state_file))
+    if state['version'] == 3:
+        return _load_state_v3(state)
+    if state['version'] == 4:
+        return _load_state_v4(state)
+    raise TypeError("Unsupported version of state")
 
