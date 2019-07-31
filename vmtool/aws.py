@@ -1544,6 +1544,15 @@ class VmTool(EnvScript):
             if v:
                 printf("    %s: %r", a, v)
 
+    def s3_show_obj_info(self, bucket, key, info):
+        printf("%s", key)
+        for k in info:
+            v = info.get(k)
+            if isinstance(v, datetime.datetime):
+                v = v.isoformat(' ')
+            if k != 'Key' and v:
+                printf("    %s: %r", k, v)
+
     def s3_iter_objects(self, bucket, prefix=None):
         s3client = self.get_s3()
         pg_list_objects = s3client.get_paginator('list_objects')
@@ -1590,21 +1599,20 @@ class VmTool(EnvScript):
             parts = kx['Key'].split('/')
             if parts[0] != backup_domain:
                 continue
-            slot = '/'.join(parts[1:-1])
-            if slot_filter and not slot.startswith(slot_filter):
-                continue
 
-            head = self.s3_get_obj_head(bucket_name, kx['Key'])
-            size = head['ContentLength']
+            size = kx['Size']
+            slot = '/'.join(parts[1:3])
             if slot not in slots:
                 slots[slot] = 0
             slots[slot] += size
             if not summary_output:
-                self.s3_show_obj_head(bucket_name, kx['Key'], head)
+                #head = self.s3_get_obj_head(bucket_name, kx['Key'])
+                #self.s3_show_obj_head(bucket_name, kx['Key'], head)
+                self.s3_show_obj_info(bucket_name, kx['Key'], kx)
 
         if summary_output:
             for slot in sorted(slots):
-                print("%s: %d" % (slot, slots[slot]))
+                print("%s: %d GB" % (slot, int(slots[slot] / (1024*1024*1024))))
 
     def cmd_get_backup(self, *slot_list):
         """Download backup files from S3.
