@@ -18,6 +18,7 @@ REGION_TO_DESC.update({
     'ap-east-1': 'Asia Pacific (Hong Kong)',
     'ap-northeast-3': 'Asia Pacific (Osaka-Local)',
     'eu-north-1': 'EU (Stockholm)',
+    'me-south-1': 'Middle East (Bahrain)',
     'us-gov-east-1': 'AWS GovCloud (US-East)',
 })
 DESC_TO_REGION = {v: k for k, v in REGION_TO_DESC.items()}
