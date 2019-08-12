@@ -3267,19 +3267,41 @@ class VmTool(EnvScript):
         """
         client = self.get_ec2_client()
         res = client.describe_images(Owners=['self'])
-        for img in sorted(res['Images'], key=lambda img: img['CreationDate']):
+        self.show_image_list(res['Images'], r'.*\D-')
+
+    def show_image_list(self, image_list, grprx=None):
+        """Walk over list, show only latest by group, unless --all given.
+        """
+        image_list = sorted(image_list, key=lambda img: img['CreationDate'])
+        if grprx and not self.options.all:
+            cache = {}
+            for img in image_list:
+                m = re.match(grprx, img['Name'])
+                if m:
+                    tag = m.group(0)
+                    cache[tag] = img
+            image_list = cache.values()
+        for img in image_list:
             self.show_image(img)
 
     def show_image(self, img):
-        printf("%s state=%s region=%s name=%s desc=%s",
-               img['ImageId'], img['State'], '?', img['Name'], img.get('Description') or '-')
-        printf("  type=%s/%s/%s/%s/%s location=%s",
+        """Details about single image.
+        """
+        printf("%s state=%s owner=%s alias=%s", img['ImageId'], img['State'], img['OwnerId'], img.get('ImageOwnerAlias', '-'))
+        printf("  type=%s/%s/%s/%s/%s ctime=%s",
                img['VirtualizationType'], img['RootDeviceType'],
                img['Architecture'], img['Hypervisor'],
                img['Public'] and 'public' or 'private',
-               img['ImageLocation'])
-        printf("  ctime=%s", img['CreationDate'])
-        printf("  tags=%s", self.load_tags(img))
+               img['CreationDate'])
+        printf("  name=%s", img['Name'])
+        if img.get('Description'):
+            printf("  desc=%s", img.get('Description'))
+        printf("  location=%s", img['ImageLocation'])
+        if self.load_tags(img):
+            printf("  tags=%s", self.load_tags(img))
+
+        if not self.options.verbose:
+            return
         printf("  disk_mapping:")
         for bdt in img['BlockDeviceMappings']:
             ebs = bdt.get('Ebs') or {}
@@ -3290,19 +3312,38 @@ class VmTool(EnvScript):
                 printf("    %s: ephemeral=%s",
                        bdt.get('DeviceName'), bdt.get('VirtualName'))
 
+    def show_public_images(self, owner_id, namefilter, grprx):
+        """Filtered request for public images.
+        """
+        client = self.get_ec2_client()
+        res = client.describe_images(Owners=[owner_id], Filters=[
+            {'Name': 'state', 'Values': ['available']},
+            {'Name': 'is-public', 'Values': ['true']},
+            {'Name': 'architecture', 'Values': ['x86_64']},         # x86_64 / i386 / arm
+            {'Name': 'virtualization-type', 'Values': ['hvm']},     # paravirtual / hvm
+            {'Name': 'root-device-type', 'Values': ['ebs']},        # ebs / instance-store
+            {'Name': 'name', 'Values': [namefilter]},
+        ])
+        self.show_image_list(res['Images'], grprx)
+
     def cmd_show_images_debian(self):
-        """Show images
+        """Show Debian images
 
         Group: image
         """
-        # https://wiki.debian.org/Cloud/AmazonEC2Image
-        client = self.get_ec2_client()
-        res = client.describe_images(Owners=['379101102735'], Filters=[
-            {'Name': 'architecture', 'Values': ['x86_64']},
-            {'Name': 'virtualization-type', 'Values': ['hvm']},  # paravirtual / hvm
-        ])
-        for img in sorted(res['Images'], key=lambda img: img['CreationDate']):
-            self.show_image(img)
+        owner_id = '379101102735'   # https://wiki.debian.org/Cloud/AmazonEC2Image
+
+        self.show_public_images(owner_id, 'debian-*', r'debian-\w+-')
+
+    def cmd_show_images_ubuntu(self):
+        """Show Ubuntu images
+
+        Group: image
+        """
+        owner_id = '099720109477'   # Owner of images from https://cloud-images.ubuntu.com/
+        #owner_id = '679593333241'  # Marketplace user 'Canonical Group Limited'
+
+        self.show_public_images(owner_id, 'ubuntu/images/*', r'.*/ubuntu-\w+-')
 
     def cmd_show_zones(self):
         """Show DNS zones set up under Route53.
