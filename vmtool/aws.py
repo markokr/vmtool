@@ -3326,16 +3326,19 @@ class VmTool(EnvScript):
         ])
         self.show_image_list(res['Images'], grprx)
 
-    def cmd_show_images_debian(self):
+    def cmd_show_images_debian(self, *codes):
         """Show Debian images
 
         Group: image
         """
         owner_id = '379101102735'   # https://wiki.debian.org/Cloud/AmazonEC2Image
 
-        self.show_public_images(owner_id, 'debian-*', r'debian-\w+-')
+        pat = 'debian-*'
+        if codes:
+            pat = 'debian-%s-*' % codes[0]
+        self.show_public_images(owner_id, pat, r'debian-\w+-')
 
-    def cmd_show_images_ubuntu(self):
+    def cmd_show_images_ubuntu(self, *codes):
         """Show Ubuntu images
 
         Group: image
@@ -3343,7 +3346,24 @@ class VmTool(EnvScript):
         owner_id = '099720109477'   # Owner of images from https://cloud-images.ubuntu.com/
         #owner_id = '679593333241'  # Marketplace user 'Canonical Group Limited'
 
-        self.show_public_images(owner_id, 'ubuntu/images/*', r'.*/ubuntu-\w+-')
+        pat = 'ubuntu/images/*'
+        if codes:
+            pat += '/ubuntu-%s-*' % codes[0]
+        self.show_public_images(owner_id, pat, r'.*/ubuntu-\w+-')
+
+
+    def cmd_show_images_ubuntu_minimal(self, *codes):
+        """Show Ubuntu minimal images
+
+        Group: image
+        """
+        owner_id = '099720109477'   # Owner of images from https://cloud-images.ubuntu.com/
+        #owner_id = '679593333241'  # Marketplace user 'Canonical Group Limited'
+
+        pat = 'ubuntu-minimal/images/*'
+        if codes:
+            pat += '/ubuntu-%s-*' % codes[0]
+        self.show_public_images(owner_id, pat, r'.*/ubuntu-\w+-')
 
     def cmd_show_zones(self):
         """Show DNS zones set up under Route53.
