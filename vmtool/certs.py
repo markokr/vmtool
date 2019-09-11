@@ -75,11 +75,10 @@ def process_config(cf, load_ca):
             key = sysca.new_rsa_key(bits)
         else:
             raise Exception('unknown key type: ' + ktype)
-
         cert = sysca.create_x509_cert(ca_key, key.public_key(), inf, ca_cert, days)
 
         pem_key = sysca.key_to_pem(key)
         pem_cert = sysca.cert_to_pem(cert)
-        res[kname] = (pem_key, pem_cert)
+        res[kname] = (pem_key, pem_cert, sect)
     return res
 

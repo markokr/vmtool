@@ -2761,7 +2761,7 @@ class VmTool(EnvScript):
             mdir = os.path.dirname(cert_ini)
             keys = load_cert_config(cert_ini, self.load_ca_keypair, defs)
             for kname in keys:
-                key, cert = keys[kname]
+                key, cert, _ = keys[kname]
                 key_fn = '%s/%s.key' % (mdir, kname)
                 cert_fn = '%s/%s.crt' % (mdir, kname)
                 dst.add_file_data(key_fn, key, 0o600)
@@ -3642,3 +3642,95 @@ class VmTool(EnvScript):
         data = json.loads(dec)
         print_json(data)
 
+    #
+    #  Gen client certs
+    #
+
+    def cmd_list_keys(self):
+        for section in self.cf.sections():
+            if section.startswith('secret'):
+                printf(section)
+
+    def cmd_upload_keys(self, path = None):
+
+        for section_name in self.cf.sections():
+
+            if not section_name.startswith('secret'):
+                continue
+            secret_cf = self.cf.view_section(section_name)
+            self._upload_certs(secret_cf)
+
+    def _upload_certs(self, secret_cf):
+        cwd = self.git_dir
+        os.chdir(cwd)
+        certs_dir = secret_cf.get('certs_dir')
+        certs_ini = os.path.join(certs_dir, 'certs.ini')
+        if not os.path.isfile(certs_ini):
+            raise ValueError('File not found')
+
+        keys = load_cert_config(certs_ini, self.load_ca_keypair, {})
+        client = self.get_boto3_client('secretsmanager')
+        for kname, value in keys.items():
+            key, cert, cert_cf = value
+            self._upload_cert(client, secret_cf, kname, key, cert, cert_cf)
+
+    def _upload_cert(self, client, secret_cf, kname, key, cert, cert_cf):
+        namespace = secret_cf.get('namespace')
+        stage = secret_cf.get('stage')
+        kind = secret_cf.get('kind')
+
+        srvc_type = cert_cf['srvc_type']
+        srvc_temp = cert_cf['srvc_temp']
+        srvc_name = cert_cf['srvc_name']
+
+        root_cert = self._get_root_cert(cert_cf)
+
+        secret_name = f"{namespace}/{stage}/{kind}/{srvc_type}/{srvc_temp}/{srvc_name}"
+        secret_str = json.dumps({
+            'key': key.decode('utf-8'),
+            'crt': key.decode('utf-8'),
+            'server_root_crt': root_cert.decode('utf-8')
+        })
+        secret_tags = [
+            {'Key': 'namespace', 'Value': namespace},
+            {'Key': 'stage', 'Value': stage},
+            {'Key': 'kind', 'Value': kind},
+            {'Key': 'srvc_type', 'Value': srvc_type},
+            {'Key': 'srvc_temp', 'Value': srvc_temp},
+            {'Key': 'srvc_name', 'Value': srvc_name},
+        ]
+
+        try:
+            client.describe_secret(SecretId = secret_name)
+            is_existing_secret = True
+        except client.exceptions.ResourceNotFoundException:
+            is_existing_secret = False
+
+        if is_existing_secret:
+            response = client.update_secret(
+                SecretId = secret_name,
+                Description = secret_name,
+                KmsKeyId = secret_cf.get('kms_key_id'),
+                SecretString = secret_str)
+            printf('Updated secret: %s' % secret_name)
+        else:
+            response = client.create_secret(
+                Name = secret_name,
+                Description = secret_name,
+                KmsKeyId = secret_cf.get('kms_key_id'),
+                SecretString = secret_str,
+                Tags = secret_tags)
+            printf('Created secret: %s' % secret_name)
+
+    def _get_root_cert(self, cf):
+        ca_dir = self.cf.get('%s_dir' % cf['ca_name'])
+        if cf['usage'] == 'client':
+            root_crt_fname = cf['server_root_crt']
+        elif cf['usage'] == 'server':
+            root_crt_fname = cf['client_root_crt']
+        else:
+            raise ValueError('Invalid value for usage: %s' % cf['usage'])
+
+        root_crt = '%s/%s/%s' % (self.keys_dir, ca_dir, root_crt_fname)
+        with open(root_crt, 'rb') as f:
+            return f.read()
