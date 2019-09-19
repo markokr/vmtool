@@ -3683,14 +3683,24 @@ class VmTool(EnvScript):
         srvc_temp = cert_cf['srvc_temp']
         srvc_name = cert_cf['srvc_name']
 
+        db_name = cert_cf.get('db_name')
+        db_user = cert_cf.get('db_user')
+
         root_cert = self._get_root_cert(cert_cf)
 
         secret_name = f"{namespace}/{stage}/{kind}/{srvc_type}/{srvc_temp}/{srvc_name}"
-        secret_str = json.dumps({
+        secret_data = {
             'key': key.decode('utf-8'),
             'crt': key.decode('utf-8'),
             'server_root_crt': root_cert.decode('utf-8')
-        })
+        }
+        if db_name:
+            secret_data['db_name'] = db_name
+        if db_user:
+            secret_data['db_user'] = db_user
+
+        secret_str = json.dumps(secret_data)
+
         secret_tags = [
             {'Key': 'namespace', 'Value': namespace},
             {'Key': 'stage', 'Value': stage},
