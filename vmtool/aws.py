@@ -3339,6 +3339,18 @@ class VmTool(EnvScript):
             pat = 'debian-%s-*' % codes[0]
         self.show_public_images(owner_id, pat, r'debian-\w+-')
 
+    def cmd_show_images_debian_new(self, *codes):
+        """Show Debian images
+
+        Group: image
+        """
+        owner_id = '136693071363'   # https://wiki.debian.org/Cloud/AmazonEC2Image/Buster
+
+        pat = 'debian-*'
+        if codes:
+            pat = 'debian-%s-*' % codes[0]
+        self.show_public_images(owner_id, pat, r'debian-\w+-')
+
     def cmd_show_images_ubuntu(self, *codes):
         """Show Ubuntu images
 
