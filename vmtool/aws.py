@@ -3759,7 +3759,7 @@ class VmTool(EnvScript):
         secret_name = f"{namespace}/{stage}/{kind}/{srvc_type}/{srvc_temp}/{srvc_name}"
         secret_data = {
             'key': key.decode('utf-8'),
-            'crt': key.decode('utf-8'),
+            'crt': cert.decode('utf-8'),
             'server_root_crt': root_cert.decode('utf-8')
         }
         if db_name:
