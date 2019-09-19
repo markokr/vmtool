@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import os.path
+import pprint
 import re
 import shlex
 import socket
@@ -3646,21 +3647,24 @@ class VmTool(EnvScript):
     #  Gen client certs
     #
 
-    def cmd_list_keys(self):
-        for section in self.cf.sections():
-            if section.startswith('secret'):
-                printf(section)
-
-    def cmd_upload_keys(self, path = None):
-
+    def cmd_list_keys(self, path = ''):
+        """api.upload-decision
+        """
         for section_name in self.cf.sections():
-
-            if not section_name.startswith('secret'):
+            if not section_name.startswith('secrets'):
                 continue
             secret_cf = self.cf.view_section(section_name)
-            self._upload_certs(secret_cf)
+            self._list_keys(secret_cf, path)
 
-    def _upload_certs(self, secret_cf):
+    def _list_keys(self, secret_cf, path):
+        kind = secret_cf.get('kind')
+        if path == 'ALL':
+            pass
+        elif path.startswith(kind):
+            pass
+        else:
+            return
+
         cwd = self.git_dir
         os.chdir(cwd)
         certs_dir = secret_cf.get('certs_dir')
@@ -3671,6 +3675,70 @@ class VmTool(EnvScript):
         keys = load_cert_config(certs_ini, self.load_ca_keypair, {})
         client = self.get_boto3_client('secretsmanager')
         for kname, value in keys.items():
+            if path == 'ALL':
+                pass
+            elif f'{kind}.{kname}'.startswith(path):
+                pass
+            else:
+                continue
+            _, _, cert_cf = value
+            self._list_key(client, secret_cf, cert_cf)
+
+    def _list_key(self, client, secret_cf, cert_cf):
+        namespace = secret_cf.get('namespace')
+        stage = secret_cf.get('stage')
+        kind = secret_cf.get('kind')
+
+        srvc_type = cert_cf['srvc_type']
+        srvc_temp = cert_cf['srvc_temp']
+        srvc_name = cert_cf['srvc_name']
+        secret_name = f"{namespace}/{stage}/{kind}/{srvc_type}/{srvc_temp}/{srvc_name}"
+        try:
+            r_description = client.describe_secret(SecretId = secret_name)
+            r_value = client.get_secret_value(
+                SecretId = secret_name)
+            printf(secret_name)
+            printf(pprint.pformat(r_description['Tags']))
+            printf(pprint.pformat(json.loads(r_value['SecretString'])))
+        except client.exceptions.ResourceNotFoundException:
+            pass
+
+
+
+
+    def cmd_upload_keys(self, path = ''):
+        for section_name in self.cf.sections():
+            if not section_name.startswith('secrets'):
+                continue
+            secret_cf = self.cf.view_section(section_name)
+            self._upload_certs(secret_cf, path)
+
+    def _upload_certs(self, secret_cf, path):
+        kind = secret_cf.get('kind')
+        if path == 'ALL':
+            pass
+        elif path.startswith(kind):
+            pass
+        else:
+            return
+
+        cwd = self.git_dir
+        os.chdir(cwd)
+        certs_dir = secret_cf.get('certs_dir')
+        certs_ini = os.path.join(certs_dir, 'certs.ini')
+        if not os.path.isfile(certs_ini):
+            raise ValueError('File not found')
+
+        keys = load_cert_config(certs_ini, self.load_ca_keypair, {})
+        client = self.get_boto3_client('secretsmanager')
+        for kname, value in keys.items():
+            if path == 'ALL':
+                pass
+            elif f'{kind}.{kname}'.startswith(path):
+                pass
+            else:
+                continue
+
             key, cert, cert_cf = value
             self._upload_cert(client, secret_cf, kname, key, cert, cert_cf)
 
