@@ -170,6 +170,10 @@ def getLocalStorage(rec):
         a = int(parts[0])
         b = int(parts[2].replace(',', ''))
         return a, b, a*b
+    if parts[1:] == ['GB', 'NVMe', 'SSD']:
+        a = 1
+        b = int(parts[0])
+        return a, b, a*b
     raise Exception('cannot parse storage: %r' % storage)
 
 
@@ -238,6 +242,10 @@ def convert(rec):
     if info.get('gpu'):
         xtask += '-' + info['gpu']
 
+    nsf = info.get('normalizationSizeFactor', 'NA')
+    if nsf == 'NA':
+        nsf = '-1'
+
     return {
         'instanceType': info['instanceType'],
         'mem': mem,
@@ -253,14 +261,13 @@ def convert(rec):
         'ecu': xecu,
         'gpu': info.get('gpu', ''),
         'region': getRegion(rec),
-        'normalizationSizeFactor': info.get('normalizationSizeFactor', ''),
+        'normalizationSizeFactor': nsf,
     }
 
 
 TABLE_FORMAT = {
     'Instance': '{instanceType:<} ({normalizationSizeFactor})',
     'Region': '{region:<}',
-    #'NSF': '{normalizationSizeFactor}',
     'Price/m': '{price:.02f}',
     'vCPU': '{vcpu}',
     'ECU': '{ecu}',
@@ -411,7 +418,10 @@ class Filter:
         price = getPrice(rec)
         local = getLocalStorage(rec)[2]
         gpu = int(info.get('gpu', '0'))
-        size = float(info.get('normalizationSizeFactor', '0'))
+        normalizationSizeFactor = info.get('normalizationSizeFactor', 'NA')
+        if normalizationSizeFactor == 'NA':
+            normalizationSizeFactor = '0'
+        size = float(normalizationSizeFactor)
 
         if mem < self.mem_min or mem > self.mem_max:
             return False
