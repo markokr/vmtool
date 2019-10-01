@@ -198,14 +198,21 @@ class VmTool(EnvScript):
             self.cf.set('vm_disk_names_size_order', ', '.join([elem[1] for elem in size_order]))
             self.cf.set('vm_disk_names_api_order', ', '.join(api_order))
 
+    _gpg_cache = None
     def load_gpg_file(self, fn):
+        if self._gpg_cache is None:
+            self._gpg_cache = {}
+        if fn in self._gpg_cache:
+            return self._gpg_cache[fn]
         if self.options.verbose:
             printf("GPG: %s", fn)
         # file data directly
         if not os.path.isfile(fn):
             raise UsageError("GPG file not found: %s" % fn)
         data = self.popen(['gpg', '-q', '-d', '--batch', fn])
-        return as_unicode(data)
+        res = as_unicode(data)
+        self._gpg_cache[fn] = res
+        return res
 
     def load_gpg_config(self, fn, main_section):
         realfn = os.path.join(self.keys_dir, fn)
