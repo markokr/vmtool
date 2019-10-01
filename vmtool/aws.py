@@ -3773,9 +3773,12 @@ class VmTool(EnvScript):
         db_name = cert_cf.get('db_name')
         db_user = cert_cf.get('db_user')
 
+        ca_name = cert_cf.get('ca_name')
+
         root_cert = self._get_root_cert(cert_cf)
 
         secret_name = f"{namespace}/{stage}/{kind}/{srvc_type}/{srvc_temp}/{srvc_name}"
+
         secret_data = {
             'key': key.decode('utf-8'),
             'crt': cert.decode('utf-8'),
@@ -3785,6 +3788,10 @@ class VmTool(EnvScript):
             secret_data['db_name'] = db_name
         if db_user:
             secret_data['db_user'] = db_user
+        if self.cf.has_option('%s_url' % ca_name):
+            base_url = self.cf.get('%s_url' % ca_name)
+            srvc_url = f"https://{kind}-{srvc_type}-{srvc_temp}.{base_url}"
+            secret_data['url'] = srvc_url
 
         secret_str = json.dumps(secret_data)
 
