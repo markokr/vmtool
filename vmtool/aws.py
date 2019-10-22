@@ -145,6 +145,10 @@ class VmTool(EnvScript):
         if not keys_dir or not os.path.isdir(keys_dir):
             raise UsageError('Set vmtool config dir: VMTOOL_KEY_DIR')
 
+        ca_log_dir = os.environ.get('VMTOOL_CA_LOG_DIR')
+        if not ca_log_dir or not os.path.isdir(ca_log_dir):
+            raise UsageError('Set vmtool config dir: VMTOOL_CA_LOG_DIR')
+
         env = os.environ.get('VMTOOL_ENV_NAME', '')
         if self.options.env:
             env = self.options.env
@@ -160,6 +164,7 @@ class VmTool(EnvScript):
             self.role_name = self.options.role
             self.full_role = '%s.%s' % (self.env_name, self.role_name)
 
+        self.ca_log_dir = ca_log_dir
         self.keys_dir = keys_dir
         self.ssh_dir = ssh_dir
 
@@ -3715,9 +3720,6 @@ class VmTool(EnvScript):
         except client.exceptions.ResourceNotFoundException:
             pass
 
-
-
-
     def cmd_upload_keys(self, path = ''):
         for section_name in self.cf.sections():
             if not section_name.startswith('secrets'):
@@ -3831,3 +3833,46 @@ class VmTool(EnvScript):
         root_crt = '%s/%s/%s' % (self.keys_dir, ca_dir, root_crt_fname)
         with open(root_crt, 'rb') as f:
             return f.read()
+
+    def cmd_log_keys(self):
+        cwd = self.ca_log_dir
+        os.chdir(cwd)
+
+        for section_name in self.cf.sections():
+            if not section_name.startswith('secrets'):
+                continue
+            secret_cf = self.cf.view_section(section_name)
+            self._log_keys(secret_cf)
+
+    def _log_keys(self, secret_cf):
+        namespace = secret_cf.get('namespace')
+        stage = secret_cf.get('stage')
+        kind = secret_cf.get('kind')
+
+        client = self.get_boto3_client('secretsmanager')
+        resp = client.list_secrets()
+        for secret in resp['SecretList']:
+            if not secret['Name'].startswith(f'{namespace}/{stage}/{kind}'):
+                continue
+            name = secret['Name']
+            tags = secret['Tags']
+            srvc_name = None
+            for tag in tags:
+                if tag['Key'] == 'srvc_name':
+                    srvc_name = tag['Value']
+                    break
+
+            if srvc_name is None:
+                continue
+
+            if not os.path.isdir(name):
+                os.makedirs(name)
+
+            r_value = client.get_secret_value(
+                SecretId = name)
+
+            timestamp = r_value['CreatedDate'].strftime("%Y%m%d-%H%M%S")
+
+            crt = json.loads(r_value['SecretString'])['crt'].encode('utf-8')
+            with open(f'{name}/{timestamp}.crt', 'wb') as f:
+                f.write(crt)
