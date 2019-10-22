@@ -47,12 +47,18 @@ def _load_state_v4(state):
         flatten(res, k, v['value'])
     return res
 
+_tf_cache = {}
+
 def tf_load_all_vars(state_file):
-    res = {}
+    if state_file in _tf_cache:
+        return _tf_cache[state_file]
     state = json.load(open(state_file))
     if state['version'] == 3:
-        return _load_state_v3(state)
-    if state['version'] == 4:
-        return _load_state_v4(state)
-    raise TypeError("Unsupported version of state")
+        res = _load_state_v3(state)
+    elif state['version'] == 4:
+        res = _load_state_v4(state)
+    else:
+        raise TypeError("Unsupported version of state")
+    _tf_cache[state_file] = res
+    return res
 

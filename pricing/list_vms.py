@@ -329,9 +329,15 @@ def setupFilter(args):
     p.add_argument('--ignore', help='list of vm types to ignore (patterns)')
     p.add_argument('-s', help='standard (amd,intel,current)', action='store_true', dest='standard')
     p.add_argument('-n', help='standard + ignore old vms', dest='onlynew', action='store_true')
+    p.add_argument('-R', help='Show region descriptions', dest='showRegions', action='store_true')
 
     p.add_argument('vmtype', help='specific vm types (patterns)', nargs='*')
     ns = p.parse_args(args)
+
+    if ns.showRegions:
+        for reg in sorted(REGION_TO_DESC):
+            print("%-10s %s" % (reg, REGION_TO_DESC[reg]))
+        sys.exit(0)
     return Filter(ns)
 
 
