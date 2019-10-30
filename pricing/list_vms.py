@@ -8,6 +8,7 @@ import fnmatch
 import json
 import re
 import sys
+import os.path
 
 import botocore.session
 
@@ -515,7 +516,9 @@ def main():
     """Launcher.
     """
     flt = setupFilter(sys.argv[1:])
-    data = json.load(open('cache/ec2.all.json'))
+    top = os.path.dirname(os.path.realpath(__file__))
+    src = os.path.join(top, 'cache/ec2.all.json')
+    data = json.load(open(src))
     selected = [rec for rec in data if flt.match(rec)]
     converted = [convert(rec) for rec in sorted(selected, key=getSortKey)]
     showTable(TABLE_FORMAT, converted)
