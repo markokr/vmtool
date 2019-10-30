@@ -1170,8 +1170,9 @@ class VmTool(EnvScript):
             else:
                 all_vms.append(vm['InstanceId'])
         if not all_vms:
-            raise UsageError("VMs not found")
-        eprintf("Running VMs for %s: %s", self.full_role, ' '.join(all_vms))
+            eprintf("No nunning VMs for %s", self.full_role)
+        else:
+            eprintf("Running VMs for %s: %s", self.full_role, ' '.join(all_vms))
         return all_vms
 
     def _check_tags(self, taglist, force_role=False, role_name=None):
