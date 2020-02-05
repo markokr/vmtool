@@ -1934,7 +1934,7 @@ class VmTool(EnvScript):
                 used.add(current_dev)
                 return current_dev
             last += 1
-        raise Exception('Failed to generate disk name: %r used=%r' % (base_dev, used_list))
+        raise Exception('Failed to generate disk name: %r used=%r' % (base_dev, used))
 
     def vm_create_start(self):
         """Create instance.
