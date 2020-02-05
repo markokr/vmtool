@@ -180,9 +180,12 @@ def dirglob_subtree(dirname, pattern, dirs_only):
                 if fn[0] != '.':
                     yield basedir + fn
 
+        filtered = []
         for dn in dnames:
             if dn[0] != '.':
+                filtered.append(dn)
                 yield basedir + dn
+        dnames[:] = filtered
 
 
 def _xglob(pat, dirs_only=False):
