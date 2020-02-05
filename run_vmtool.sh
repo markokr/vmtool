@@ -2,7 +2,7 @@
 
 # run vmtool in automatically generated virtualenv
 
-CURVER=2
+CURVER=3
 PYTHON=python3
 
 top=$(dirname $(realpath $0))

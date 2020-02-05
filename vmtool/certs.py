@@ -2,8 +2,8 @@
 """
 
 from configparser import ConfigParser, ExtendedInterpolation
-import sysca
-
+from sysca import api as sysca
+from .util import as_bytes
 
 __all__ = ['load_cert_config']
 
@@ -77,8 +77,8 @@ def process_config(cf, load_ca):
             raise Exception('unknown key type: ' + ktype)
         cert = sysca.create_x509_cert(ca_key, key.public_key(), inf, ca_cert, days)
 
-        pem_key = sysca.key_to_pem(key)
-        pem_cert = sysca.cert_to_pem(cert)
+        pem_key = as_bytes(sysca.serialize(key))
+        pem_cert = as_bytes(sysca.serialize(cert))
         res[kname] = (pem_key, pem_cert, sect)
     return res
 
