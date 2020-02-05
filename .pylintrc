@@ -74,9 +74,12 @@ disable=bad-continuation,
 	no-else-return,
 	no-self-use,
 	trailing-newlines,
+	too-many-instance-attributes,
 	unused-argument,
 	unused-variable,
 	using-constant-test,
+	no-else-continue,
+	no-else-break,
 	useless-object-inheritance
 
 # Enable the message, report, category or checker with the given id(s). You can
