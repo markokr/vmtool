@@ -21,6 +21,7 @@ REGION_TO_DESC.update({
     'eu-north-1': 'EU (Stockholm)',
     'me-south-1': 'Middle East (Bahrain)',
     'us-gov-east-1': 'AWS GovCloud (US-East)',
+    'us-west-2-lax-1a': 'US West (Los Angeles)',
 })
 DESC_TO_REGION = {v: k for k, v in REGION_TO_DESC.items()}
 
@@ -49,8 +50,10 @@ def xeon(n, tag):
 CPU_CODES = {
     "AMD EPYC 7571": EPYC_V1,
     "AWS Graviton Processor": "ARMv8-A",
+    "AWS Graviton2 Processor": "ARMv8.2-A",
     "High Frequency Intel Xeon E7-8880 v3 (Haswell)": xeon(3, "E7-8880"),
     "Intel Skylake E5 2686 v5 (2.5 GHz)": xeon(5, "E5-2686"),
+    "Intel Skylake E5 2686 v5": xeon(5, "E5-2686"),
     "Intel Xeon E5-2650": xeon(1, "E5-2650"),
     "Intel Xeon E5-2666 v3 (Haswell)": xeon(3, "E5-2666"),
     "Intel Xeon E5-2670": xeon(1, "E5-2670"),
@@ -66,7 +69,9 @@ CPU_CODES = {
     "Intel Xeon Platinum 8151": xeon(5, "P-8151"),
     "Intel Xeon Platinum 8175": xeon(5, "P-8175"),
     "Intel Xeon Platinum 8175 (Skylake)": xeon(5, "P-8175"),
-    "Intel Xeon Platinum 8275L": xeon(7, "P-8275"),
+    "Intel Xeon Platinum 8259 (Cascade Lake)": xeon(7, "P-8259"),
+    "Intel Xeon Platinum 8275L": xeon(7, "P-8275L"),
+    "Intel Xeon Platinum 8275CL (Cascade Lake)": xeon(7, "P-8275CL"),
     "Variable": "Variable",
 }
 
@@ -143,7 +148,7 @@ def getArch(rec):
         return 'intel'
     if info['physicalProcessor'].startswith('AMD EPYC '):
         return 'amd'
-    if info['physicalProcessor'].startswith('AWS Graviton '):
+    if info['physicalProcessor'].startswith('AWS Graviton'):
         return 'arm'
     if info['physicalProcessor'].startswith('Variable'):
         return 'intel'
