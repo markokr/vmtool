@@ -3785,8 +3785,14 @@ class VmTool(EnvScript):
         secret_data = {
             'key': key.decode('utf-8'),
             'crt': cert.decode('utf-8'),
-            'server_root_crt': root_cert.decode('utf-8')
         }
+        if cert_cf['usage'] == 'client':
+            secret_data['server_root_crt'] = root_cert.decode('utf-8')
+        elif cert_cf['usage'] == 'server':
+            secret_data['client_root_crt'] = root_cert.decode('utf-8')
+        else:
+            raise ValueError('Invalid value for usage: %s' % cert_cf['usage'])
+
         if db_name:
             secret_data['db_name'] = db_name
         if db_user:
