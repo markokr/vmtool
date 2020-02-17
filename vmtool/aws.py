@@ -3864,8 +3864,8 @@ class VmTool(EnvScript):
         kind = secret_cf.get('kind')
 
         client = self.get_boto3_client('secretsmanager')
-        resp = client.list_secrets()
-        for secret in resp['SecretList']:
+        list_secrets_pager = self.pager(client, "list_secrets", "SecretList")
+        for secret in list_secrets_pager():
             if not secret['Name'].startswith(f'{namespace}/{stage}/{kind}'):
                 continue
             name = secret['Name']
