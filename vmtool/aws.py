@@ -3673,7 +3673,9 @@ class VmTool(EnvScript):
     #
 
     def cmd_list_keys(self, path = ''):
-        """api.upload-decision
+        """List issued keys.
+
+        Group: kms
         """
         for section_name in self.cf.sections():
             if not section_name.startswith('secrets'):
@@ -3729,6 +3731,10 @@ class VmTool(EnvScript):
             pass
 
     def cmd_upload_keys(self, path = ''):
+        """Issue new certificates.
+
+        Group: kms
+        """
         for section_name in self.cf.sections():
             if not section_name.startswith('secrets'):
                 continue
@@ -3849,6 +3855,10 @@ class VmTool(EnvScript):
             return f.read()
 
     def cmd_log_keys(self):
+        """Copy issued certificates to log directory.
+
+        Group: kms
+        """
         cwd = self.ca_log_dir
         os.chdir(cwd)
 
