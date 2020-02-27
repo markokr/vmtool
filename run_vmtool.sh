@@ -5,7 +5,9 @@
 CURVER=3
 PYTHON=python3
 
-top=$(dirname $(realpath $0))
+script="$0"
+top=$(python3 -c "from os.path import realpath, dirname; print(dirname(realpath('${script}')))")
+
 venv="$HOME/.vmtool-venv"
 ver="$venv/ver.txt"
 
