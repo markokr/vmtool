@@ -803,6 +803,12 @@ class VmTool(EnvScript):
         return ['ssh', ssh_debug, '-i', self.get_ssh_kfile(), '-l', ssh_user,
                 '-o', 'UserKnownHostsFile=' + self.ssh_known_hosts] + ssh_options
 
+    def vm_exec_tmux(self, vm_id, cmdline, use_admin=False):
+        if self.options.tmux:
+            tmux_command = shlex.split(self.cf.get('tmux_command'))
+            cmdline = tmux_command + cmdline
+        self.vm_exec(vm_id, cmdline, use_admin=use_admin)
+
     def vm_exec(self, vm_id, cmdline, stdin=None, get_output=False, check_error=True, use_admin=False):
         logging.debug("EXEC@%s: %s", vm_id, cmdline)
         self.put_known_host_from_tags(vm_id)
@@ -2323,9 +2329,9 @@ class VmTool(EnvScript):
         """
         vm_id, args = self.get_vm_args(args)
         if len(args) == 1:
-            self.vm_exec(vm_id, args[0])
+            self.vm_exec_tmux(vm_id, args[0])
         else:
-            self.vm_exec(vm_id, args or [])
+            self.vm_exec_tmux(vm_id, args or [])
 
     def cmd_ssh_admin(self, *args):
         """SSH to VM and run command (optional).
@@ -2334,9 +2340,9 @@ class VmTool(EnvScript):
         """
         vm_id, args = self.get_vm_args(args)
         if len(args) == 1:
-            self.vm_exec(vm_id, args[0], use_admin=True)
+            self.vm_exec_tmux(vm_id, args[0], use_admin=True)
         else:
-            self.vm_exec(vm_id, args or [], use_admin=True)
+            self.vm_exec_tmux(vm_id, args or [], use_admin=True)
 
     def cmd_rsync(self, *args):
         """Use rsync to transport files.
@@ -2826,10 +2832,7 @@ class VmTool(EnvScript):
 
         time_printf("%s: Running", vm_id)
         cmdline = ["/bin/sh", "-c", launcher, 'runit']
-        if self.options.tmux:
-            tmux_command = shlex.split(self.cf.get('tmux_command'))
-            cmdline = tmux_command + cmdline
-        self.vm_exec(vm_id, cmdline, None, use_admin=use_admin)
+        self.vm_exec_tmux(vm_id, cmdline, use_admin=use_admin)
 
     def cmd_tmux_attach(self, vm_id):
         """Attach to regular non-admin session.
@@ -3191,11 +3194,7 @@ class VmTool(EnvScript):
             else:
                 fullcmd = fullcmd + args
 
-        if self.options.tmux:
-            tmux_command = shlex.split(self.cf.get('tmux_command'))
-            fullcmd = tmux_command + fullcmd
-
-        self.vm_exec(vm_id, fullcmd)
+        self.vm_exec_tmux(vm_id, fullcmd)
 
     def change_cwd_adv(self):
         # cd .. until there is .git
