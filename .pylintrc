@@ -80,6 +80,7 @@ disable=bad-continuation,
 	using-constant-test,
 	no-else-continue,
 	no-else-break,
+	chained-comparison,
 	useless-object-inheritance
 
 # Enable the message, report, category or checker with the given id(s). You can
