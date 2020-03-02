@@ -21,6 +21,7 @@ REGION_TO_DESC.update({
     "eu-north-1": "EU (Stockholm)",
     "me-south-1": "Middle East (Bahrain)",
     "us-gov-east-1": "AWS GovCloud (US-East)",
+    "us-gov-west-1": "AWS GovCloud (US-West)",
     "us-west-2-lax-1a": "US West (Los Angeles)",
 })
 DESC_TO_REGION = {v: k for k, v in REGION_TO_DESC.items()}
