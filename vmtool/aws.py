@@ -303,6 +303,7 @@ class VmTool(EnvScript):
         p.add_argument("--all-role-vms", action="store_true", help="Run command on all vms for role")
         p.add_argument("--running", action="store_true", help="Show only running instances")
         p.add_argument("--az", type=int, help="Set availability zone")
+        p.add_argument("--tmux", action="store_true", help="Wrap session in tmux")
         return p
 
     def get_boto3_session(self, region=None):
@@ -2808,25 +2809,43 @@ class VmTool(EnvScript):
 
     def run_mod_data(self, data, vm_id, use_admin=False):
 
+        tmp_uuid = str(uuid.uuid4())
         run_user = 'root'
 
-        launcher = './runner.sh "$@"'
+        launcher = './tmp/%s/vmlib/runner.sh "%s"' % (tmp_uuid, vm_id)
         rm_cmd = 'rm -rf'
         if run_user:
             launcher = 'sudo -nH -u %s %s' % (run_user, launcher)
             rm_cmd = 'sudo -nH ' + rm_cmd
 
-        args = [vm_id]
-
-        tmp_uuid = str(uuid.uuid4())
         time_printf("%s: Sending data - %d bytes", vm_id, len(data))
-        decomp_script = 'install -d -m 711 tmp && mkdir -p "tmp/%s" && tar xzf - --warning=no-timestamp -C "tmp/%s"' % (tmp_uuid, tmp_uuid)
+        decomp_script = 'install -d -m 711 tmp && mkdir -p "tmp/%s" && tar xzf - --warning=no-timestamp -C "tmp/%s"' % (
+            tmp_uuid, tmp_uuid
+        )
         self.vm_exec(vm_id, ["/bin/sh", "-c", decomp_script, 'decomp'], data, use_admin=use_admin)
 
         time_printf("%s: Running", vm_id)
-        runit_script = 'cd "tmp/%s/vmlib" && %s && cd ../../.. && %s "tmp/%s"' % (tmp_uuid, launcher, rm_cmd, tmp_uuid)
-        cmdline = ["/bin/sh", "-c", runit_script, 'runit'] + args
+        cmdline = ["/bin/sh", "-c", launcher, 'runit']
+        if self.options.tmux:
+            tmux_command = shlex.split(self.cf.get('tmux_command'))
+            cmdline = tmux_command + cmdline
         self.vm_exec(vm_id, cmdline, None, use_admin=use_admin)
+
+    def cmd_tmux_attach(self, vm_id):
+        """Attach to regular non-admin session.
+
+        Group: vm
+        """
+        cmdline = shlex.split(self.cf.get('tmux_attach'))
+        self.vm_exec(vm_id, cmdline, None, use_admin=False)
+
+    def cmd_tmux_attach_admin(self, vm_id):
+        """Attach to admin session.
+
+        Group: vm
+        """
+        cmdline = shlex.split(self.cf.get('tmux_attach'))
+        self.vm_exec(vm_id, cmdline, None, use_admin=True)
 
     def cmd_get_output(self, vm_id):
         """Print console output.
@@ -3171,6 +3190,11 @@ class VmTool(EnvScript):
                 fullcmd = fullcmd + [argparam, ' '.join(args)]
             else:
                 fullcmd = fullcmd + args
+
+        if self.options.tmux:
+            tmux_command = shlex.split(self.cf.get('tmux_command'))
+            fullcmd = tmux_command + fullcmd
+
         self.vm_exec(vm_id, fullcmd)
 
     def change_cwd_adv(self):
