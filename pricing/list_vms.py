@@ -526,7 +526,8 @@ def main():
     flt = setupFilter(sys.argv[1:])
     top = os.path.dirname(os.path.realpath(__file__))
     src = os.path.join(top, "cache/ec2.all.json")
-    data = json.load(open(src))
+    with open(src) as f:
+        data = json.load(f)
     selected = [rec for rec in data if flt.match(rec)]
     converted = [convert(rec) for rec in sorted(selected, key=getSortKey)]
     showTable(TABLE_FORMAT, converted)
