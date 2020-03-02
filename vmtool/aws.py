@@ -2165,6 +2165,9 @@ class VmTool(EnvScript):
         """
         self.cf.set('vm_state', VmState.PRIMARY)
 
+        if self.options.tmux:
+            raise UsageError('This command does not support tmux')
+
         primary_check_old = self.cf.getboolean('primary_check_old', False)
         primary_stop_old = self.cf.getboolean('primary_stop_old', False)
 
@@ -3046,6 +3049,9 @@ class VmTool(EnvScript):
 
         Group: vm
         """
+        if self.options.tmux:
+            raise UsageError('This command does not support tmux')
+
         self.change_cwd_adv()
 
         if old_primary_ids:
@@ -3076,6 +3082,9 @@ class VmTool(EnvScript):
 
         Group: vm
         """
+        if self.options.tmux:
+            raise UsageError('This command does not support tmux')
+
         self.change_cwd_adv()
 
         # make sure it exists
@@ -3120,6 +3129,8 @@ class VmTool(EnvScript):
 
         Group: vm
         """
+        if self.options.tmux:
+            raise UsageError('This command does not support tmux')
         old_primary = self.cmd_safe_upgrade()
         time.sleep(15)
         self.cmd_drop_node(old_primary)
@@ -3129,6 +3140,9 @@ class VmTool(EnvScript):
 
         Group: vm
         """
+        if self.options.tmux:
+            raise UsageError('This command does not support tmux')
+
         vm_id = self.cmd_create_secondary()
         old_primary = self.cmd_takeover(vm_id)
 
@@ -3142,6 +3156,9 @@ class VmTool(EnvScript):
 
         Group: vm
         """
+        if self.options.tmux:
+            raise UsageError('This command does not support tmux')
+
         printf("Drop node: %s", vm_id)
 
         cmd = VmCmd.DROP_NODE_PREPARE
@@ -3231,6 +3248,9 @@ class VmTool(EnvScript):
 
         Group: image
         """
+        if self.options.tmux:
+            raise UsageError('This command does not support tmux')
+
         client = self.get_ec2_client()
 
         name = self.cf.get('image_name')
