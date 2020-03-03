@@ -61,6 +61,7 @@ echo "$INSTANCE_ID: entropy added" > /dev/console
 
 
 SSH_USER_CREATION = '''
+if ! grep -q '^{user}:' /etc/passwd; then
 adduser --gecos "{user}" --disabled-password {user} < /dev/null
 install -d -o {user} -g {user} -m 700  ~{user}/.ssh
 echo "{pubkey}" > ~{user}/.ssh/authorized_keys
@@ -69,6 +70,7 @@ chown {user}:{user} ~{user}/.ssh/authorized_keys
 for grp in {auth_groups}; do
     adduser "{user}" "$grp"
 done
+fi
 '''
 
 # replace those with root specified by image
