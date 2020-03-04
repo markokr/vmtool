@@ -90,16 +90,66 @@ OLD_NET = {
     "High": "~1",
 }
 
+RES_YEARS = {
+    "1yr": 1,
+    "3yr": 3,
+}
+RES_OPT = {
+    "No Upfront": "none",
+    "Partial Upfront": "part",
+    "All Upfront": "upfront",
+}
 
-def getPrice(rec):
+
+def roundFloat(f):
+    return float("%.02f" % f)
+
+
+def getPriceMap(rec):
     """Return price as float.
     """
     ondemand = list(rec["terms"]["OnDemand"].values())
+    reserved = list(rec["terms"].get("Reserved", {}).values())
+    priceMap = {}
+    for rtype in reserved:
+        rlen = rtype["termAttributes"]["LeaseContractLength"]
+        ropt = rtype["termAttributes"]["PurchaseOption"]
+        rclass = rtype["termAttributes"]["OfferingClass"]
+        rname = "reserved/%s/%s/%s" % (
+            rlen,
+            rclass,
+            RES_OPT[ropt],
+        )
+        nyear = RES_YEARS[rlen]
+        price = 0
+        for pdim in rtype["priceDimensions"].values():
+            if pdim.get("beginRange", "0") != "0":
+                raise ValueError("unexpected beginRange: %r" % (pdim.get("beginRange", "0"),))
+            if pdim["unit"] == "Quantity":
+                priceunit = float(pdim["pricePerUnit"]["USD"])
+                price += priceunit / (nyear * 12)
+            elif pdim["unit"] == "Hrs":
+                priceunit = float(pdim["pricePerUnit"]["USD"])
+                price += priceunit * 24 * 30
+            else:
+                raise ValueError("bad price record: %r" % pdim)
+        priceMap[rname] = price
+
     pdata = list(ondemand[0]["priceDimensions"].values())
     if pdata[0]["unit"] != "Hrs":
         raise Exception("invalid price unit: %r" % pdata[0]["unit"])
-    price = float(pdata[0]["pricePerUnit"]["USD"])
-    return price * 24 * 30
+    priceunit = float(pdata[0]["pricePerUnit"]["USD"])
+    price = priceunit * 24 * 30
+    priceMap["ondemand"] = price
+
+    sortedMap = {}
+    for k in sorted(priceMap):
+        sortedMap[k] = roundFloat(priceMap[k])
+    return sortedMap
+
+
+def getPrice(rec):
+    return getPriceMap(rec)["ondemand"]
 
 
 def getMem(rec):
@@ -339,7 +389,10 @@ def setupFilter(args):
     p.add_argument("--ignore", help="list of vm types to ignore (patterns)")
     p.add_argument("-s", help="standard (amd,intel,current)", action="store_true", dest="standard")
     p.add_argument("-n", help="standard + ignore old vms", dest="onlynew", action="store_true")
-    p.add_argument("-R", help="Show region descriptions", dest="showRegions", action="store_true")
+
+    g = p.add_argument_group('alternative commands')
+    g.add_argument("-R", help="Show region descriptions", dest="showRegions", action="store_true")
+    g.add_argument("-P", help="Show reserved prices", dest="showReserved", action="store_true")
 
     p.add_argument("vmtype", help="specific vm types (patterns)", nargs="*")
     ns = p.parse_args(args)
@@ -413,6 +466,8 @@ class Filter:
 
         if ns.vmtype:
             self.vms = ns.vmtype
+
+        self.showReserved = ns.showReserved
 
     def match(self, rec):
         """Return True if record matches.
@@ -519,6 +574,14 @@ def getSortKey(rec):
     info = rec["product"]["attributes"]
     return (getPrice(rec), info["instanceType"], info["location"])
 
+def showReserved(selected):
+    res = {}
+    for rec in selected:
+        info = rec["product"]["attributes"]
+        name = info["instanceType"]
+        res[name] = getPriceMap(rec)
+    print(json.dumps(res, indent=2))
+
 
 def main():
     """Launcher.
@@ -529,8 +592,12 @@ def main():
     with open(src) as f:
         data = json.load(f)
     selected = [rec for rec in data if flt.match(rec)]
-    converted = [convert(rec) for rec in sorted(selected, key=getSortKey)]
-    showTable(TABLE_FORMAT, converted)
+    selected = sorted(selected, key=getSortKey)
+    if flt.showReserved:
+        showReserved(selected)
+    else:
+        converted = [convert(rec) for rec in selected]
+        showTable(TABLE_FORMAT, converted)
 
 
 if __name__ == "__main__":
