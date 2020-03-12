@@ -374,7 +374,7 @@ def fnmatchList(val, patlist):
 def setupFilter(args):
     """Parse filter args from command line.
     """
-    p = argparse.ArgumentParser(description="Process some integers.")
+    p = argparse.ArgumentParser(description="List VM type info.")
     p.add_argument("--mem", help="memory range (min..max)")
     p.add_argument("--cpu", help="cpu range (min..max)")
     p.add_argument("--gpu", help="gpu range (min..max)")
