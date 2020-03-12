@@ -805,9 +805,11 @@ class VmTool(EnvScript):
         return ['ssh', ssh_debug, '-i', self.get_ssh_kfile(), '-l', ssh_user,
                 '-o', 'UserKnownHostsFile=' + self.ssh_known_hosts] + ssh_options
 
-    def vm_exec_tmux(self, vm_id, cmdline, use_admin=False):
+    def vm_exec_tmux(self, vm_id, cmdline, use_admin=False, title=None):
         if self.options.tmux:
             tmux_command = shlex.split(self.cf.get('tmux_command'))
+            if title:
+                tmux_command = [a.replace('{title}', title) for a in tmux_command]
             cmdline = tmux_command + cmdline
         self.vm_exec(vm_id, cmdline, use_admin=use_admin)
 
@@ -2334,9 +2336,9 @@ class VmTool(EnvScript):
         """
         vm_id, args = self.get_vm_args(args)
         if len(args) == 1:
-            self.vm_exec_tmux(vm_id, args[0])
+            self.vm_exec_tmux(vm_id, args[0], title="ssh")
         else:
-            self.vm_exec_tmux(vm_id, args or [])
+            self.vm_exec_tmux(vm_id, args or [], title="ssh")
 
     def cmd_ssh_admin(self, *args):
         """SSH to VM and run command (optional).
@@ -2345,9 +2347,9 @@ class VmTool(EnvScript):
         """
         vm_id, args = self.get_vm_args(args)
         if len(args) == 1:
-            self.vm_exec_tmux(vm_id, args[0], use_admin=True)
+            self.vm_exec_tmux(vm_id, args[0], use_admin=True, title="ssh-admin")
         else:
-            self.vm_exec_tmux(vm_id, args or [], use_admin=True)
+            self.vm_exec_tmux(vm_id, args or [], use_admin=True, title="ssh-admin")
 
     def cmd_rsync(self, *args):
         """Use rsync to transport files.
@@ -2660,7 +2662,7 @@ class VmTool(EnvScript):
             if not data_info:
                 data_info = 1
             print('RUNNING...')
-            self.run_mod_data(data, vm_id, use_admin=info['use_admin'])
+            self.run_mod_data(data, vm_id, use_admin=info['use_admin'], title=cmd_name)
             if info['cmd_abbr']:
                 self.set_stamp(vm_id, info['cmd_abbr'], info['stamp'], *info['stamp_dirs'])
 
@@ -2818,7 +2820,7 @@ class VmTool(EnvScript):
             raise UsageError("CA key not found: %s" % last_key)
         return (last_key, last_crt)
 
-    def run_mod_data(self, data, vm_id, use_admin=False):
+    def run_mod_data(self, data, vm_id, use_admin=False, title=None):
 
         tmp_uuid = str(uuid.uuid4())
         run_user = 'root'
@@ -2837,7 +2839,7 @@ class VmTool(EnvScript):
 
         time_printf("%s: Running", vm_id)
         cmdline = ["/bin/sh", "-c", launcher, 'runit']
-        self.vm_exec_tmux(vm_id, cmdline, use_admin=use_admin)
+        self.vm_exec_tmux(vm_id, cmdline, use_admin=use_admin, title=title)
 
     def cmd_tmux_attach(self, vm_id):
         """Attach to regular non-admin session.
@@ -3213,7 +3215,7 @@ class VmTool(EnvScript):
             else:
                 fullcmd = fullcmd + args
 
-        self.vm_exec_tmux(vm_id, fullcmd)
+        self.vm_exec_tmux(vm_id, fullcmd, title=cmd)
 
     def change_cwd_adv(self):
         # cd .. until there is .git
