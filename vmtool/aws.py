@@ -74,7 +74,7 @@ fi
 '''
 
 # replace those with root specified by image
-ROOT_DEV_NAMES = ('root', 'xvda')
+ROOT_DEV_NAMES = ('root', 'xvda', '/dev/sda1')
 
 
 def show_commits(old_id, new_id, dirs, cwd):
@@ -3947,3 +3947,147 @@ class VmTool(EnvScript):
             crt = json.loads(r_value['SecretString'])['crt'].encode('utf-8')
             with open(f'{name}/{timestamp}.crt', 'wb') as f:
                 f.write(crt)
+
+    def fetch_disk_info(self, vm_ids):
+        args = {}
+        args['Filters'] = self.get_env_filters()
+        if vm_ids:
+            args['InstanceIds'] = vm_ids
+
+        vm_list = []
+        for vm in self.ec2_iter_instances(**args):
+            vm_list.append(vm)
+        if not vm_list:
+            raise UsageError("Instance not found")
+
+        # vol_id->vol
+        vol_map = self.get_volume_map(vm_list)
+
+        # load disks from config
+        disk_map = self.get_disk_map()
+        vm_disk_names_size_order = self.cf.getlist('vm_disk_names_size_order')
+        vm_disk_names_api_order = self.cf.getlist('vm_disk_names_api_order')
+
+        final_list = []
+        for vm in vm_list:
+            if vm['State']['Name'] != 'running':
+                continue
+            final_info = {
+                'vm': vm,
+                'config_disk_map': disk_map,
+                'volume_map': {}, # name -> volume
+                'device_map': {}, # name -> DeviceName
+            }
+
+            # load disk from running vm
+            root_vol_id = None
+            cur_vol_list = []
+            vol_name_to_vol_id = {}
+            dev_map = {}        # vol_id->dev_name
+            for bdev in vm.get('BlockDeviceMappings', []):
+                ebs = bdev.get('Ebs')
+                if not ebs:
+                    continue
+
+                vol = vol_map[ebs['VolumeId']]
+                vol_info = (vol['Size'], ebs['VolumeId'])
+                dev_name = bdev.get('DeviceName')
+                dev_map[ebs['VolumeId']] = dev_name
+                if dev_name in ROOT_DEV_NAMES:
+                    root_vol_id = ebs['VolumeId']
+                    final_info['volume_map']['root'] = vol
+                    final_info['device_map']['root'] = dev_name
+                else:
+                    cur_vol_list.append(vol_info)
+            if not root_vol_id:
+                raise UsageError("Root volume not found")
+
+            if len(cur_vol_list) != len(vm_disk_names_size_order):
+                raise UsageError("Number of disks does not match: cur=%r names=%r" % (cur_vol_list, vm_disk_names_size_order))
+
+            cur_vol_list.sort()
+            for nr, (size, vol_id) in enumerate(cur_vol_list):
+                vol_name = vm_disk_names_size_order[nr]
+                final_info['volume_map'][vol_name] = vol_map[vol_id]
+                final_info['device_map'][vol_name] = dev_map[vol_id]
+            final_list.append(final_info)
+
+        return final_list
+
+    def show_disk_info(self, vm_disk_info, vol_name):
+        vm = vm_disk_info['vm']
+        volume_map = vm_disk_info['volume_map']
+        config_disk_map = vm_disk_info['config_disk_map']
+        device_map = vm_disk_info['device_map']
+
+        vol_info = volume_map[vol_name]
+        vol_conf = config_disk_map[vol_name]
+        cursize = vol_info['Size']
+        newsize = vol_conf['size']
+        dev_name = device_map[vol_name]
+
+        print("{vm_id}/{vol_id}".format(vm_id=vm['InstanceId'], vol_id=vol_info['VolumeId']))
+
+        flag = ""
+        if newsize != cursize:
+            flag = " !!!"
+        print(f"  name: {vol_name},  device: {dev_name}")
+        print(f"  cursize: {cursize},   newsize: {newsize}{flag}")
+
+        # attachement state
+        xlist = []
+        for att in vol_info.get('Attachments', []):
+            # State/Device/InstanceId/VolumeId/DeleteOnTermination
+            xlist.append(att['State'])
+        attinfo = ",".join(xlist)
+
+        # state: 'creating'|'available'|'in-use'|'deleting'|'deleted'|'error',
+        print(f"  state: {vol_info['State']} / {attinfo}")
+
+        if vol_info.get('Iops'):
+            print(f"  iops: {vol_info['Iops']}")
+
+    def cmd_show_disks(self, *vm_ids):
+        """Show detailed volume info.
+
+        Group: info
+        """
+        vm_disk_list = self.fetch_disk_info(vm_ids)
+
+        for vm_disk_info in vm_disk_list:
+            for vol_name in vm_disk_info['volume_map']:
+                self.show_disk_info(vm_disk_info, vol_name)
+
+    def cmd_modify_disks(self, vm_id):
+        """Increase disk size
+
+        Group: admin
+        """
+        vm_disk_list = self.fetch_disk_info([vm_id])
+        client = self.get_ec2_client()
+        for vm_info in vm_disk_list:
+            vm = vm_info['vm']
+            volume_map = vm_info['volume_map']
+            config_disk_map = vm_info['config_disk_map']
+            device_map = vm_info['device_map']
+
+            for vol_name in volume_map:
+                vol_info = volume_map[vol_name]
+                vol_conf = config_disk_map[vol_name]
+                cursize = vol_info['Size']
+                newsize = vol_conf['size']
+                if cursize > newsize:
+                    raise UsageError("Cannot decrease size")
+                if cursize == newsize:
+                    continue
+
+                self.show_disk_info(vm_info, vol_name)
+
+                # request size increase
+                printf("Modifying %s, newsize=%d...", vol_info['VolumeId'], newsize)
+                client.modify_volume(
+                    VolumeId=vol_info['VolumeId'],
+                    Size=newsize,
+                )
+                printf("Done")
+
