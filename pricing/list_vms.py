@@ -12,7 +12,12 @@ import sys
 
 import botocore.session
 
+
+#
 # region code to desc maps
+#
+# https://github.com/boto/botocore/blob/develop/botocore/data/endpoints.json
+#
 AWS_ENDPOINTS = botocore.session.get_session().get_data("endpoints")
 REGION_TO_DESC = {r: rv["description"] for part in AWS_ENDPOINTS["partitions"] for r, rv in part["regions"].items()}
 REGION_TO_DESC.update({
@@ -23,6 +28,8 @@ REGION_TO_DESC.update({
     "us-gov-east-1": "AWS GovCloud (US-East)",
     "us-gov-west-1": "AWS GovCloud (US-West)",
     "us-west-2-lax-1a": "US West (Los Angeles)",
+    "af-south-1": "Africa (Cape Town)",
+    "eu-south-1": "EU (Milan)",
 })
 DESC_TO_REGION = {v: k for k, v in REGION_TO_DESC.items()}
 
