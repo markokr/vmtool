@@ -1210,15 +1210,23 @@ class VmTool(EnvScript):
             return False
         return True
 
-    def get_vm_args(self, args):
+    def get_vm_args(self, args, allow_multi=False):
         """Check if args start with VM ID.
 
         returns: (vm-id, args)
         """
         if args and args[0][:2] == 'i-':
-            return args[0], args[1:]
-        main_vms = self.get_primary_vms()
-        return main_vms[0], args
+            vm_list = [args[0]]
+            args = args[1:]
+        else:
+            vm_list = self.get_primary_vms()
+
+        if allow_multi:
+            return vm_list, args
+
+        if len(vm_list) != 1:
+            raise UsageError("Command does not support multiple vms")
+        return vm_list[0], args
 
     def cmd_show_vms(self, *cmdargs):
         """Show VMs.
@@ -3208,14 +3216,18 @@ class VmTool(EnvScript):
         argparam = cmd_cf.get('vmrun_arg_param', '')
 
         fullcmd = shlex.split(cmdline)
-        vm_id, args = self.get_vm_args(cmdargs)
+        vm_ids, args = self.get_vm_args(cmdargs, allow_multi=True)
         if args:
             if argparam:
                 fullcmd = fullcmd + [argparam, ' '.join(args)]
             else:
                 fullcmd = fullcmd + args
 
-        self.vm_exec_tmux(vm_id, fullcmd, title=cmd)
+        if len(vm_ids) > 1 and self.options.tmux:
+            raise UsageError("Cannot use tmux in parallel")
+
+        for vm_id in vm_ids:
+            self.vm_exec_tmux(vm_id, fullcmd, title=cmd)
 
     def change_cwd_adv(self):
         # cd .. until there is .git
