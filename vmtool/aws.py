@@ -3966,7 +3966,6 @@ class VmTool(EnvScript):
         # load disks from config
         disk_map = self.get_disk_map()
         vm_disk_names_size_order = self.cf.getlist('vm_disk_names_size_order')
-        vm_disk_names_api_order = self.cf.getlist('vm_disk_names_api_order')
 
         final_list = []
         for vm in vm_list:
@@ -3982,7 +3981,6 @@ class VmTool(EnvScript):
             # load disk from running vm
             root_vol_id = None
             cur_vol_list = []
-            vol_name_to_vol_id = {}
             dev_map = {}        # vol_id->dev_name
             for bdev in vm.get('BlockDeviceMappings', []):
                 ebs = bdev.get('Ebs')
@@ -4016,15 +4014,12 @@ class VmTool(EnvScript):
 
     def show_disk_info(self, vm_disk_info, vol_name):
         vm = vm_disk_info['vm']
-        volume_map = vm_disk_info['volume_map']
-        config_disk_map = vm_disk_info['config_disk_map']
-        device_map = vm_disk_info['device_map']
+        vol_info = vm_disk_info['volume_map'][vol_name]
+        vol_conf = vm_disk_info['config_disk_map'][vol_name]
+        dev_name = vm_disk_info['device_map'][vol_name]
 
-        vol_info = volume_map[vol_name]
-        vol_conf = config_disk_map[vol_name]
         cursize = vol_info['Size']
         newsize = vol_conf['size']
-        dev_name = device_map[vol_name]
 
         print("{vm_id}/{vol_id}".format(vm_id=vm['InstanceId'], vol_id=vol_info['VolumeId']))
 
@@ -4065,11 +4060,10 @@ class VmTool(EnvScript):
         """
         vm_disk_list = self.fetch_disk_info([vm_id])
         client = self.get_ec2_client()
+        modified_vol_ids = []
         for vm_info in vm_disk_list:
-            vm = vm_info['vm']
             volume_map = vm_info['volume_map']
             config_disk_map = vm_info['config_disk_map']
-            device_map = vm_info['device_map']
 
             for vol_name in volume_map:
                 vol_info = volume_map[vol_name]
@@ -4090,4 +4084,37 @@ class VmTool(EnvScript):
                     Size=newsize,
                 )
                 printf("Done")
+                modified_vol_ids.append(vol_info['VolumeId'])
+
+        iter_vol_modifications = self.pager(
+            client, 'describe_volumes_modifications', 'VolumesModifications'
+        )
+
+        # wait until complete
+        while modified_vol_ids:
+            incomplete = 0
+            for mod in iter_vol_modifications(VolumeIds=modified_vol_ids):
+                mstate = mod.get('ModificationState')
+                if not mstate:
+                    continue
+                if mstate not in (
+                    'completed', 'failed',
+                    # takes very long time but the volume is immediately usable
+                    'optimizing',
+                ):
+                    incomplete += 1
+                msg = ''
+                if mod.get("StatusMessage"):
+                    msg = "  msg={StatusMessage}".format(**mod)
+                printf(
+                    "{VolumeId}: state={ModificationState}"
+                    " oldsize={OriginalSize} newsize={TargetSize}"
+                    " progress={Progress}%{msg}".format(msg=msg, **mod))
+
+            if not incomplete:
+                break
+            printf('')
+            time.sleep(2)
+
+        time_printf("Finished")
 
