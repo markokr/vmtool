@@ -471,7 +471,9 @@ class VmTool(EnvScript):
             for rec in self.pricing_iter_products(FormatVersion='aws_v1', ServiceCode=kwargs.get('ServiceCode'), Filters=filters):
                 res.append(rec)
             if len(res) != 1:
-                raise UsageError("Broken pricing filter: expect 1 row, got %d" % len(res))
+                raise UsageError("Broken pricing filter: expect 1 row, got %d, cache_key: %s" % (
+                    len(res), cache_key)
+                )
             self._pricing_cache[cache_key] = res[0]
         return self._pricing_cache[cache_key]
 
@@ -517,7 +519,8 @@ class VmTool(EnvScript):
             operatingSystem='Linux',    # NA, Linux, RHEL, SUSE, Windows
             tenancy='Shared',           # NA, Dedicated, Host, Reserved, Shared
             capacitystatus='Used',      # NA, Used, AllocatedCapacityReservation, AllocatedHost, UnusedCapacityReservation
-            instanceType=vmtype)
+            instanceType=vmtype,
+        )
 
         return {
             'onDemandHourly': loadOnDemand(vmdata),
