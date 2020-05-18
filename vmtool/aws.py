@@ -3230,6 +3230,8 @@ class VmTool(EnvScript):
             raise UsageError("Cannot use tmux in parallel")
 
         for vm_id in vm_ids:
+            if len(vm_ids) > 1:
+                time_printf("Running on VM %s", vm_id)
             self.vm_exec_tmux(vm_id, fullcmd, title=cmd)
 
     def change_cwd_adv(self):
