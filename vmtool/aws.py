@@ -420,7 +420,9 @@ class VmTool(EnvScript):
                 raise Exception("unsupported endpoints version: %d" % self._endpoints['version'])
         for part in self._endpoints['partitions']:
             if part['partition'] == 'aws': # aws, aws-us-gov, aws-cn
-                return part['regions'][region]['description']
+                desc = part['regions'][region]['description']
+                desc = desc.replace('Europe', 'EU') # botocore vs. us-east-1/pricing bug
+                return desc
         raise Exception("did not find 'aws' partition")
 
     def get_volume_desc(self, vol_type):

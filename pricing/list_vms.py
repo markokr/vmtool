@@ -19,7 +19,11 @@ import botocore.session
 # https://github.com/boto/botocore/blob/develop/botocore/data/endpoints.json
 #
 AWS_ENDPOINTS = botocore.session.get_session().get_data("endpoints")
-REGION_TO_DESC = {r: rv["description"] for part in AWS_ENDPOINTS["partitions"] for r, rv in part["regions"].items()}
+REGION_TO_DESC = {
+    r: rv["description"].replace("Europe", "EU")
+    for part in AWS_ENDPOINTS["partitions"]
+        for r, rv in part["regions"].items()
+}
 REGION_TO_DESC.update({
     "ap-east-1": "Asia Pacific (Hong Kong)",
     "ap-northeast-3": "Asia Pacific (Osaka-Local)",

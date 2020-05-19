@@ -12,7 +12,11 @@ import botocore.session
 
 # region code to desc maps
 AWS_ENDPOINTS = botocore.session.get_session().get_data("endpoints")
-REGION_TO_DESC = {r: rv["description"] for part in AWS_ENDPOINTS["partitions"] for r, rv in part["regions"].items()}
+REGION_TO_DESC = {
+    r: rv["description"].replace("Europe", "EU")
+    for part in AWS_ENDPOINTS["partitions"]
+        for r, rv in part["regions"].items()
+}
 DESC_TO_REGION = {v: k for k, v in REGION_TO_DESC.items()}
 
 
