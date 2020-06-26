@@ -1985,6 +1985,7 @@ class VmTool(EnvScript):
         cpu_credits = self.cf.get('cpu_credits', '')
         cpu_count = self.cf.getint('cpu_count', 0)
         cpu_thread_count = self.cf.getint('cpu_thread_count', 0)
+        aws_extra_tags = self.cf.getdict('aws_extra_tags', {})
         xname = 'vm.' + self.env_name
         if self.role_name:
             xname += '.' + self.role_name
@@ -2130,6 +2131,8 @@ class VmTool(EnvScript):
         ]
         if self.role_name:
             tags.append({'Key': 'Role', 'Value': self.role_name})
+        for k, v in aws_extra_tags.items():
+            tags.append({'Key': k, 'Value': v})
         args['TagSpecifications'] = [
             {'ResourceType': 'instance', 'Tags': tags},
             {'ResourceType': 'volume', 'Tags': tags},
