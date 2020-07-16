@@ -2032,11 +2032,18 @@ class VmTool(EnvScript):
                 elif k in ('enc-standard', 'enc-gp2', 'enc-st1', 'enc-sc1', 'enc-io1'):
                     ebs['VolumeType'] = k.split('-')[1]
                     ebs['Encrypted'] = True
+                elif k.startswith('ephemeral'):
+                    bdev['VirtualName'] = k
                 else:
                     eprintf("ERROR: unknown disk param: %r", k)
                     sys.exit(1)
 
-            if ebs:
+            if bdev.get('VirtualName'):
+                ebs.pop('VolumeSize', 0)
+                if ebs:
+                    eprintf("ERROR: ephemeral device cannot have EBS params: %r", ebs)
+                    sys.exit(1)
+            elif ebs:
                 if 'VolumeSize' not in ebs:
                     ebs['VolumeSize'] = 10
                 if 'VolumeType' not in ebs:
