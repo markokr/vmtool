@@ -1985,6 +1985,7 @@ class VmTool(EnvScript):
         cpu_credits = self.cf.get('cpu_credits', '')
         cpu_count = self.cf.getint('cpu_count', 0)
         cpu_thread_count = self.cf.getint('cpu_thread_count', 0)
+        aws_extra_tags = self.cf.getdict('aws_extra_tags', {})
         xname = 'vm.' + self.env_name
         if self.role_name:
             xname += '.' + self.role_name
@@ -2137,6 +2138,8 @@ class VmTool(EnvScript):
         ]
         if self.role_name:
             tags.append({'Key': 'Role', 'Value': self.role_name})
+        for k, v in aws_extra_tags.items():
+            tags.append({'Key': k, 'Value': v})
         args['TagSpecifications'] = [
             {'ResourceType': 'instance', 'Tags': tags},
             {'ResourceType': 'volume', 'Tags': tags},
@@ -2250,13 +2253,30 @@ class VmTool(EnvScript):
         """
         self.new_ssh_key(vm_id)
 
-    def cmd_tag(self, res_id, name):
-        """Set 'Name' tag.
+    def cmd_tag(self):
+        """Set extra tags to vm and related volumes.
 
         Group: vm
         """
-        client = self.get_ec2_client()
-        client.create_tags(Resources=[res_id], Tags=[{'Key': 'Name', 'Value': name}])
+        if not self.env_name:
+            raise Exception("No env_name")
+
+        if not self.role_name:
+            raise Exception("No role_name")
+
+        tags = []
+        aws_extra_tags = self.cf.getdict('aws_extra_tags', {})
+        for k, v in aws_extra_tags.items():
+            tags.append({'Key': k, 'Value': v})
+
+        if tags:
+            client = self.get_ec2_client()
+            for vm in self.ec2_iter_instances(Filters=self.get_env_filters()):
+                client.create_tags(Resources=[vm['InstanceId']], Tags=tags)
+                for bdm in vm.get('BlockDeviceMappings', []):
+                    ebs = bdm.get('Ebs')
+                    if ebs:
+                        client.create_tags(Resources=[ebs['VolumeId']], Tags=tags)
 
     def cmd_start(self, *ids):
         """Start instance.
