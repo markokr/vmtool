@@ -3659,6 +3659,14 @@ class VmTool(EnvScript):
                 for vrec in rec['ResourceRecords']:
                     ipmap[vrec['Value']] = rec['Name']
 
+        # consider other zones
+        for zone_id in self.cf.getlist('extra_internal_dns_zone_ids', []):
+            for rec in self.route53_iter_rrsets(HostedZoneId=zone_id):
+                if rec['Type'] not in ('A', 'AAAA'):
+                    continue
+                for vrec in rec['ResourceRecords']:
+                    ipmap[vrec['Value']] = rec['Name']
+
         return ipmap
 
     def cmd_show_tf(self):
