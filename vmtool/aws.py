@@ -1155,6 +1155,7 @@ class VmTool(EnvScript):
 
             return main_vms
 
+        internal_hostname = self.cf.get('internal_hostname')
         dnsmap = self.get_dns_map()
         for vm in self.ec2_iter_instances(Filters=self.get_env_filters()):
             if not self._check_tags(vm.get('Tags'), True):
@@ -1162,6 +1163,10 @@ class VmTool(EnvScript):
             if vm['State']['Name'] != 'running':
                 continue
             if vm.get('PrivateIpAddress') in dnsmap:
+                if internal_hostname:
+                    dns_name = dnsmap[vm['PrivateIpAddress']].rstrip(".")
+                    if dns_name != internal_hostname:
+                        continue
                 main_vms.append(vm['InstanceId'])
             elif vm.get('PublicIpAddress') in dnsmap:
                 main_vms.append(vm['InstanceId'])
