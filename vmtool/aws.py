@@ -1191,7 +1191,7 @@ class VmTool(EnvScript):
             else:
                 all_vms.append(vm['InstanceId'])
         if not all_vms:
-            eprintf("No nunning VMs for %s", self.full_role)
+            eprintf("No running VMs for %s", self.full_role)
         else:
             eprintf("Running VMs for %s: %s", self.full_role, ' '.join(all_vms))
         return all_vms
