@@ -2500,7 +2500,10 @@ class VmTool(EnvScript):
 
         Usage: ${TF ! tfvar}
         """
-        state_file = self.cf.get('tf_state_file')
+        if ":" in arg:
+            state_file, arg = [s.strip() for s in arg.split(":", 1)]
+        else:
+            state_file = self.cf.get('tf_state_file')
         val = tf_load_output_var(state_file, arg)
 
         # configparser expects strings
@@ -2558,9 +2561,12 @@ class VmTool(EnvScript):
 
         Usage: ${TFAZ ! tfvar}
         """
-        state_file = self.cf.get('tf_state_file')
         if self.options.verbose:
             printf("TFAZ: %s", arg)
+        if ":" in arg:
+            state_file, arg = [s.strip() for s in arg.split(":", 1)]
+        else:
+            state_file = self.cf.get('tf_state_file')
         val = tf_load_output_var(state_file, arg)
         if not isinstance(val, list):
             raise UsageError("TFAZ function expects list param: %s" % kname)
