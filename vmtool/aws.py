@@ -4017,6 +4017,26 @@ class VmTool(EnvScript):
             with open(f'{name}/{timestamp}.crt', 'wb') as f:
                 f.write(crt)
 
+    def cmd_tag_keys(self):
+        """Tag issued certificates with extra tags.
+
+        Group: kms
+        """
+        if not self.env_name:
+            raise Exception("No env_name")
+
+        tags = []
+        sec_extra_tags = self.cf.getdict('sec_extra_tags', {})
+        for k, v in sec_extra_tags.items():
+            tags.append({'Key': k, 'Value': v})
+
+        if tags:
+            client = self.get_boto3_client('secretsmanager')
+            pager = self.pager(client, "list_secrets", "SecretList")
+            for secret in pager():
+                if secret['Name'].startswith(f'dp/{self.env_name}/'):
+                    client.tag_resource(SecretId=secret['Name'], Tags=tags)
+
     def fetch_disk_info(self, vm_ids):
         args = {}
         args['Filters'] = self.get_env_filters()
