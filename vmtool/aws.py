@@ -3931,6 +3931,10 @@ class VmTool(EnvScript):
             {'Key': 'srvc_name', 'Value': srvc_name},
         ]
 
+        sec_extra_tags = self.cf.getdict('sec_extra_tags', {})
+        for k, v in sec_extra_tags.items():
+            secret_tags.append({'Key': k, 'Value': v})
+
         try:
             client.describe_secret(SecretId = secret_name)
             is_existing_secret = True
