@@ -3744,7 +3744,7 @@ class VmTool(EnvScript):
         certs_dir = secret_cf.get('certs_dir')
         certs_ini = os.path.join(certs_dir, 'certs.ini')
         if not os.path.isfile(certs_ini):
-            raise ValueError('File not found')
+            raise ValueError('File not found: %s' % certs_ini)
 
         keys = load_cert_config(certs_ini, self.load_ca_keypair, {})
         client = self.get_boto3_client('secretsmanager')
@@ -3766,7 +3766,9 @@ class VmTool(EnvScript):
         srvc_type = cert_cf['srvc_type']
         srvc_temp = cert_cf['srvc_temp']
         srvc_name = cert_cf['srvc_name']
-        secret_name = f"{namespace}/{stage}/{kind}/{srvc_type}/{srvc_temp}/{srvc_name}"
+        srvc_repo = cert_cf['srvc_repo']
+
+        secret_name = f"{namespace}/{stage}/{kind}/{srvc_repo}/{srvc_type}/{srvc_temp}/{srvc_name}"
         try:
             r_description = client.describe_secret(SecretId = secret_name)
             r_value = client.get_secret_value(
@@ -3825,6 +3827,7 @@ class VmTool(EnvScript):
         srvc_type = cert_cf['srvc_type']
         srvc_temp = cert_cf['srvc_temp']
         srvc_name = cert_cf['srvc_name']
+        srvc_repo = cert_cf['srvc_repo']
 
         db_name = cert_cf.get('db_name')
         db_user = cert_cf.get('db_user')
@@ -3833,7 +3836,7 @@ class VmTool(EnvScript):
 
         root_cert = self._get_root_cert(cert_cf)
 
-        secret_name = f"{namespace}/{stage}/{kind}/{srvc_type}/{srvc_temp}/{srvc_name}"
+        secret_name = f"{namespace}/{stage}/{kind}/{srvc_repo}/{srvc_type}/{srvc_temp}/{srvc_name}"
 
         secret_data = {
             'key': key.decode('utf-8'),
@@ -3850,10 +3853,10 @@ class VmTool(EnvScript):
             secret_data['db_name'] = db_name
         if db_user:
             secret_data['db_user'] = db_user
-        if self.cf.has_option('%s_url' % ca_name):
-            base_url = self.cf.get('%s_url' % ca_name)
-            srvc_url = f"https://{kind}-{srvc_type}-{srvc_temp}.{base_url}"
-            secret_data['url'] = srvc_url
+        #if self.cf.has_option('%s_url' % ca_name):
+        #    base_url = self.cf.get('%s_url' % ca_name)
+        #    srvc_url = f"https://{kind}-{srvc_type}-{srvc_temp}.{base_url}"
+        #    secret_data['url'] = srvc_url
 
         secret_str = json.dumps(secret_data)
 
@@ -3864,6 +3867,7 @@ class VmTool(EnvScript):
             {'Key': 'srvc_type', 'Value': srvc_type},
             {'Key': 'srvc_temp', 'Value': srvc_temp},
             {'Key': 'srvc_name', 'Value': srvc_name},
+            {'Key': 'srvc_repo', 'Value': srvc_repo},
         ]
 
         try:
