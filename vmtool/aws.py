@@ -14,6 +14,7 @@ import os
 import os.path
 import pprint
 import re
+import secrets
 import shlex
 import socket
 import stat
@@ -35,7 +36,7 @@ from vmtool.envconfig import load_env_config, find_gittop
 from vmtool.scripting import EnvScript, UsageError
 from vmtool.tarfilter import TarFilter
 from vmtool.terra import tf_load_output_var, tf_load_all_vars
-from vmtool.util import encode_base64, fmt_dur
+from vmtool.util import fmt_dur
 from vmtool.util import printf, eprintf, time_printf, print_json, local_cmd, run_successfully
 from vmtool.util import ssh_add_known_host, parse_console, rsh_quote, as_unicode
 from vmtool.xglob import xglob
@@ -44,32 +45,50 @@ from vmtool.xglob import xglob
 # /usr/share/doc/cloud-init/userdata.txt
 USERDATA = """\
 MIME-Version: 1.0
-Content-Type: multipart/mixed; boundary="===BND==="
+Content-Type: multipart/mixed; boundary="===RND==="
 
---===BND===
+--===RND===
 Content-Type: text/cloud-boothook; charset="us-ascii"
 Content-Disposition: attachment; filename="early-init.sh"
 Content-Transfer-Encoding: 7bit
 
-#!/bin/sh
+#! /bin/sh
+
 echo "$INSTANCE_ID: RND" > /dev/urandom
 ( ls -l --full-time /var/log; dmesg; ) | sha512sum > /dev/urandom
 echo "$INSTANCE_ID: entropy added" > /dev/console
 
---===BND===--
+--===RND===
+Content-Type: text/x-shellscript; charset="us-ascii"
+Content-Disposition: attachment; filename="late-init.sh"
+Content-Transfer-Encoding: 7bit
+
+#! /bin/sh
+
+addgroup -q --system vmsudo
+
+test -f /etc/sudoers.d/00-vmsudo || {
+  echo "%vmsudo ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/00-vmsudo
+  chmod 440 /etc/sudoers.d/00-vmsudo
+}
+
+AUTHORIZED_USER_CREATION
+
+--===RND===--
 """
 
 
-SSH_USER_CREATION = '''
+SSH_USER_CREATION = '''\
 if ! grep -q '^{user}:' /etc/passwd; then
-adduser --gecos "{user}" --disabled-password {user} < /dev/null
-install -d -o {user} -g {user} -m 700  ~{user}/.ssh
-echo "{pubkey}" > ~{user}/.ssh/authorized_keys
-chmod 600 ~{user}/.ssh/authorized_keys
-chown {user}:{user} ~{user}/.ssh/authorized_keys
-for grp in {auth_groups}; do
-    adduser "{user}" "$grp"
-done
+  echo "Adding user {user}"
+  adduser -q --gecos {user} --disabled-password {user} < /dev/null
+  install -d -o {user} -g {user} -m 700  ~{user}/.ssh
+  echo "{pubkey}" > ~{user}/.ssh/authorized_keys
+  chmod 600 ~{user}/.ssh/authorized_keys
+  chown {user}:{user} ~{user}/.ssh/authorized_keys
+  for grp in {auth_groups}; do
+    adduser -q {user} $grp
+  done
 fi
 '''
 
@@ -796,7 +815,9 @@ class VmTool(EnvScript):
         return fn
 
     def ssh_cmdline(self, use_admin=False):
-        if use_admin:
+        if self.cf.getboolean('ssh_admin_user_disabled', False):
+            ssh_user = self.cf.get('user')
+        elif use_admin:
             ssh_user = self.cf.get('ssh_admin_user')
         else:
             ssh_user = self.cf.get('user')
@@ -1915,9 +1936,13 @@ class VmTool(EnvScript):
             show_commits(old_id, commit_id, list(dirs), self.git_dir)
 
     def gen_user_data(self):
-        rnd = as_unicode(encode_base64(os.urandom(30)))
+        rnd = secrets.token_urlsafe(20)
         mimedata = USERDATA.replace('RND', rnd)
-        return mimedata
+        if "AUTHORIZED_USER_CREATION" in mimedata:
+            mimedata = mimedata.replace(
+                "AUTHORIZED_USER_CREATION", self.make_user_creation()
+            )
+        return gzip.compress(mimedata.encode("utf8"))
 
     def cmd_create(self):
         """Create instance.
@@ -2440,20 +2465,23 @@ class VmTool(EnvScript):
             return '\n'.join(keys)
 
         if key == 'AUTHORIZED_USER_CREATION':
-            auth_groups = self.cf.getlist('authorized_user_groups', [])
-            auth_users = self.cf.getlist('ssh_authorized_users', [])
-            pat = self.cf.get('ssh_pubkey_pattern')
-            script = []
-            for user in sorted(set(auth_users)):
-                fn = os.path.join(self.keys_dir, pat.replace('USER', user))
-                pubkey = open(fn).read().strip()
-                script.append(mk_sshuser_script(user, auth_groups, pubkey))
-            return '\n'.join(script)
+            return self.make_user_creation()
 
         try:
             return self.cf.get(key)
         except NoOptionError:
             raise UsageError("%s: key not found: %s" % (fname, key))
+
+    def make_user_creation(self):
+        auth_groups = self.cf.getlist('authorized_user_groups', [])
+        auth_users = self.cf.getlist('ssh_authorized_users', [])
+        pat = self.cf.get('ssh_pubkey_pattern')
+        script = []
+        for user in sorted(set(auth_users)):
+            fn = os.path.join(self.keys_dir, pat.replace('USER', user))
+            pubkey = open(fn).read().strip()
+            script.append(mk_sshuser_script(user, auth_groups, pubkey))
+        return '\n'.join(script)
 
     def make_tar_filter(self, extra_defs=None):
         defs = {}
