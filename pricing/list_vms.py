@@ -94,6 +94,11 @@ CPU_CODES = {
     "Variable": "Variable",
 }
 
+CCY_RATE = {
+    "USD": 1,
+    "CNY": 6.96772,
+}
+
 
 # approx numbers for speed hints on old instances
 # https://stackoverflow.com/questions/18507405/ec2-instance-typess-exact-network-performance/35806587
@@ -120,6 +125,14 @@ def roundFloat(f):
     return float("%.02f" % f)
 
 
+def getPricePerUnit(pdim):
+    ppu = pdim["pricePerUnit"]
+    for code in CCY_RATE:
+        if code in ppu:
+            return float(ppu[code])
+    raise ValueError("Unknown currency: %r" % list(ppu))
+
+
 def getPriceMap(rec):
     """Return price as float.
     """
@@ -141,11 +154,9 @@ def getPriceMap(rec):
             if pdim.get("beginRange", "0") != "0":
                 raise ValueError("unexpected beginRange: %r" % (pdim.get("beginRange", "0"),))
             if pdim["unit"] == "Quantity":
-                priceunit = float(pdim["pricePerUnit"]["USD"])
-                price += priceunit / (nyear * 12)
+                price += getPricePerUnit(pdim) / (nyear * 12)
             elif pdim["unit"] == "Hrs":
-                priceunit = float(pdim["pricePerUnit"]["USD"])
-                price += priceunit * 24 * 30
+                price += getPricePerUnit(pdim) * 24 * 30
             else:
                 raise ValueError("bad price record: %r" % pdim)
         priceMap[rname] = price
@@ -153,7 +164,7 @@ def getPriceMap(rec):
     pdata = list(ondemand[0]["priceDimensions"].values())
     if pdata[0]["unit"] != "Hrs":
         raise Exception("invalid price unit: %r" % pdata[0]["unit"])
-    priceunit = float(pdata[0]["pricePerUnit"]["USD"])
+    priceunit = getPricePerUnit(pdata[0])
     price = priceunit * 24 * 30
     priceMap["ondemand"] = price
 
