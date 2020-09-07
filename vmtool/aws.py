@@ -14,6 +14,7 @@ import os
 import os.path
 import pprint
 import re
+import secrets
 import shlex
 import socket
 import stat
@@ -35,7 +36,7 @@ from vmtool.envconfig import load_env_config, find_gittop
 from vmtool.scripting import EnvScript, UsageError
 from vmtool.tarfilter import TarFilter
 from vmtool.terra import tf_load_output_var, tf_load_all_vars
-from vmtool.util import encode_base64, fmt_dur
+from vmtool.util import fmt_dur
 from vmtool.util import printf, eprintf, time_printf, print_json, local_cmd, run_successfully
 from vmtool.util import ssh_add_known_host, parse_console, rsh_quote, as_unicode
 from vmtool.xglob import xglob
@@ -44,37 +45,55 @@ from vmtool.xglob import xglob
 # /usr/share/doc/cloud-init/userdata.txt
 USERDATA = """\
 MIME-Version: 1.0
-Content-Type: multipart/mixed; boundary="===BND==="
+Content-Type: multipart/mixed; boundary="===RND==="
 
---===BND===
+--===RND===
 Content-Type: text/cloud-boothook; charset="us-ascii"
 Content-Disposition: attachment; filename="early-init.sh"
 Content-Transfer-Encoding: 7bit
 
-#!/bin/sh
+#! /bin/sh
+
 echo "$INSTANCE_ID: RND" > /dev/urandom
 ( ls -l --full-time /var/log; dmesg; ) | sha512sum > /dev/urandom
 echo "$INSTANCE_ID: entropy added" > /dev/console
 
---===BND===--
+--===RND===
+Content-Type: text/x-shellscript; charset="us-ascii"
+Content-Disposition: attachment; filename="late-init.sh"
+Content-Transfer-Encoding: 7bit
+
+#! /bin/sh
+
+addgroup -q --system vmsudo
+
+test -f /etc/sudoers.d/00-vmsudo || {
+  echo "%vmsudo ALL=(ALL) NOPASSWD: ALL" > /etc/sudoers.d/00-vmsudo
+  chmod 440 /etc/sudoers.d/00-vmsudo
+}
+
+AUTHORIZED_USER_CREATION
+
+--===RND===--
 """
 
 
-SSH_USER_CREATION = '''
+SSH_USER_CREATION = '''\
 if ! grep -q '^{user}:' /etc/passwd; then
-adduser --gecos "{user}" --disabled-password {user} < /dev/null
-install -d -o {user} -g {user} -m 700  ~{user}/.ssh
-echo "{pubkey}" > ~{user}/.ssh/authorized_keys
-chmod 600 ~{user}/.ssh/authorized_keys
-chown {user}:{user} ~{user}/.ssh/authorized_keys
-for grp in {auth_groups}; do
-    adduser "{user}" "$grp"
-done
+  echo "Adding user {user}"
+  adduser -q --gecos {user} --disabled-password {user} < /dev/null
+  install -d -o {user} -g {user} -m 700  ~{user}/.ssh
+  echo "{pubkey}" > ~{user}/.ssh/authorized_keys
+  chmod 600 ~{user}/.ssh/authorized_keys
+  chown {user}:{user} ~{user}/.ssh/authorized_keys
+  for grp in {auth_groups}; do
+    adduser -q {user} $grp
+  done
 fi
 '''
 
 # replace those with root specified by image
-ROOT_DEV_NAMES = ('root', 'xvda')
+ROOT_DEV_NAMES = ('root', 'xvda', '/dev/sda1')
 
 
 def show_commits(old_id, new_id, dirs, cwd):
@@ -420,7 +439,9 @@ class VmTool(EnvScript):
                 raise Exception("unsupported endpoints version: %d" % self._endpoints['version'])
         for part in self._endpoints['partitions']:
             if part['partition'] == 'aws': # aws, aws-us-gov, aws-cn
-                return part['regions'][region]['description']
+                desc = part['regions'][region]['description']
+                desc = desc.replace('Europe', 'EU') # botocore vs. us-east-1/pricing bug
+                return desc
         raise Exception("did not find 'aws' partition")
 
     def get_volume_desc(self, vol_type):
@@ -471,7 +492,9 @@ class VmTool(EnvScript):
             for rec in self.pricing_iter_products(FormatVersion='aws_v1', ServiceCode=kwargs.get('ServiceCode'), Filters=filters):
                 res.append(rec)
             if len(res) != 1:
-                raise UsageError("Broken pricing filter: expect 1 row, got %d" % len(res))
+                raise UsageError("Broken pricing filter: expect 1 row, got %d, cache_key: %s" % (
+                    len(res), cache_key)
+                )
             self._pricing_cache[cache_key] = res[0]
         return self._pricing_cache[cache_key]
 
@@ -517,7 +540,8 @@ class VmTool(EnvScript):
             operatingSystem='Linux',    # NA, Linux, RHEL, SUSE, Windows
             tenancy='Shared',           # NA, Dedicated, Host, Reserved, Shared
             capacitystatus='Used',      # NA, Used, AllocatedCapacityReservation, AllocatedHost, UnusedCapacityReservation
-            instanceType=vmtype)
+            instanceType=vmtype,
+        )
 
         return {
             'onDemandHourly': loadOnDemand(vmdata),
@@ -791,7 +815,9 @@ class VmTool(EnvScript):
         return fn
 
     def ssh_cmdline(self, use_admin=False):
-        if use_admin:
+        if self.cf.getboolean('ssh_admin_user_disabled', False):
+            ssh_user = self.cf.get('user')
+        elif use_admin:
             ssh_user = self.cf.get('ssh_admin_user')
         else:
             ssh_user = self.cf.get('user')
@@ -1150,6 +1176,7 @@ class VmTool(EnvScript):
 
             return main_vms
 
+        internal_hostname = self.cf.get('internal_hostname')
         dnsmap = self.get_dns_map()
         for vm in self.ec2_iter_instances(Filters=self.get_env_filters()):
             if not self._check_tags(vm.get('Tags'), True):
@@ -1157,6 +1184,10 @@ class VmTool(EnvScript):
             if vm['State']['Name'] != 'running':
                 continue
             if vm.get('PrivateIpAddress') in dnsmap:
+                if internal_hostname:
+                    dns_name = dnsmap[vm['PrivateIpAddress']].rstrip(".")
+                    if dns_name != internal_hostname:
+                        continue
                 main_vms.append(vm['InstanceId'])
             elif vm.get('PublicIpAddress') in dnsmap:
                 main_vms.append(vm['InstanceId'])
@@ -1181,7 +1212,7 @@ class VmTool(EnvScript):
             else:
                 all_vms.append(vm['InstanceId'])
         if not all_vms:
-            eprintf("No nunning VMs for %s", self.full_role)
+            eprintf("No running VMs for %s", self.full_role)
         else:
             eprintf("Running VMs for %s: %s", self.full_role, ' '.join(all_vms))
         return all_vms
@@ -1210,15 +1241,23 @@ class VmTool(EnvScript):
             return False
         return True
 
-    def get_vm_args(self, args):
+    def get_vm_args(self, args, allow_multi=False):
         """Check if args start with VM ID.
 
         returns: (vm-id, args)
         """
         if args and args[0][:2] == 'i-':
-            return args[0], args[1:]
-        main_vms = self.get_primary_vms()
-        return main_vms[0], args
+            vm_list = [args[0]]
+            args = args[1:]
+        else:
+            vm_list = self.get_primary_vms()
+
+        if allow_multi:
+            return vm_list, args
+
+        if len(vm_list) != 1:
+            raise UsageError("Command does not support multiple vms")
+        return vm_list[0], args
 
     def cmd_show_vms(self, *cmdargs):
         """Show VMs.
@@ -1897,9 +1936,13 @@ class VmTool(EnvScript):
             show_commits(old_id, commit_id, list(dirs), self.git_dir)
 
     def gen_user_data(self):
-        rnd = as_unicode(encode_base64(os.urandom(30)))
+        rnd = secrets.token_urlsafe(20)
         mimedata = USERDATA.replace('RND', rnd)
-        return mimedata
+        if "AUTHORIZED_USER_CREATION" in mimedata:
+            mimedata = mimedata.replace(
+                "AUTHORIZED_USER_CREATION", self.make_user_creation()
+            )
+        return gzip.compress(mimedata.encode("utf8"))
 
     def cmd_create(self):
         """Create instance.
@@ -1972,6 +2015,7 @@ class VmTool(EnvScript):
         cpu_credits = self.cf.get('cpu_credits', '')
         cpu_count = self.cf.getint('cpu_count', 0)
         cpu_thread_count = self.cf.getint('cpu_thread_count', 0)
+        aws_extra_tags = self.cf.getdict('aws_extra_tags', {})
         xname = 'vm.' + self.env_name
         if self.role_name:
             xname += '.' + self.role_name
@@ -2019,11 +2063,18 @@ class VmTool(EnvScript):
                 elif k in ('enc-standard', 'enc-gp2', 'enc-st1', 'enc-sc1', 'enc-io1'):
                     ebs['VolumeType'] = k.split('-')[1]
                     ebs['Encrypted'] = True
+                elif k.startswith('ephemeral'):
+                    bdev['VirtualName'] = k
                 else:
                     eprintf("ERROR: unknown disk param: %r", k)
                     sys.exit(1)
 
-            if ebs:
+            if bdev.get('VirtualName'):
+                ebs.pop('VolumeSize', 0)
+                if ebs:
+                    eprintf("ERROR: ephemeral device cannot have EBS params: %r", ebs)
+                    sys.exit(1)
+            elif ebs:
                 if 'VolumeSize' not in ebs:
                     ebs['VolumeSize'] = 10
                 if 'VolumeType' not in ebs:
@@ -2117,6 +2168,8 @@ class VmTool(EnvScript):
         ]
         if self.role_name:
             tags.append({'Key': 'Role', 'Value': self.role_name})
+        for k, v in aws_extra_tags.items():
+            tags.append({'Key': k, 'Value': v})
         args['TagSpecifications'] = [
             {'ResourceType': 'instance', 'Tags': tags},
             {'ResourceType': 'volume', 'Tags': tags},
@@ -2230,13 +2283,30 @@ class VmTool(EnvScript):
         """
         self.new_ssh_key(vm_id)
 
-    def cmd_tag(self, res_id, name):
-        """Set 'Name' tag.
+    def cmd_tag(self):
+        """Set extra tags to vm and related volumes.
 
         Group: vm
         """
-        client = self.get_ec2_client()
-        client.create_tags(Resources=[res_id], Tags=[{'Key': 'Name', 'Value': name}])
+        if not self.env_name:
+            raise Exception("No env_name")
+
+        if not self.role_name:
+            raise Exception("No role_name")
+
+        tags = []
+        aws_extra_tags = self.cf.getdict('aws_extra_tags', {})
+        for k, v in aws_extra_tags.items():
+            tags.append({'Key': k, 'Value': v})
+
+        if tags:
+            client = self.get_ec2_client()
+            for vm in self.ec2_iter_instances(Filters=self.get_env_filters()):
+                client.create_tags(Resources=[vm['InstanceId']], Tags=tags)
+                for bdm in vm.get('BlockDeviceMappings', []):
+                    ebs = bdm.get('Ebs')
+                    if ebs:
+                        client.create_tags(Resources=[ebs['VolumeId']], Tags=tags)
 
     def cmd_start(self, *ids):
         """Start instance.
@@ -2395,20 +2465,23 @@ class VmTool(EnvScript):
             return '\n'.join(keys)
 
         if key == 'AUTHORIZED_USER_CREATION':
-            auth_groups = self.cf.getlist('authorized_user_groups', [])
-            auth_users = self.cf.getlist('ssh_authorized_users', [])
-            pat = self.cf.get('ssh_pubkey_pattern')
-            script = []
-            for user in sorted(set(auth_users)):
-                fn = os.path.join(self.keys_dir, pat.replace('USER', user))
-                pubkey = open(fn).read().strip()
-                script.append(mk_sshuser_script(user, auth_groups, pubkey))
-            return '\n'.join(script)
+            return self.make_user_creation()
 
         try:
             return self.cf.get(key)
         except NoOptionError:
             raise UsageError("%s: key not found: %s" % (fname, key))
+
+    def make_user_creation(self):
+        auth_groups = self.cf.getlist('authorized_user_groups', [])
+        auth_users = self.cf.getlist('ssh_authorized_users', [])
+        pat = self.cf.get('ssh_pubkey_pattern')
+        script = []
+        for user in sorted(set(auth_users)):
+            fn = os.path.join(self.keys_dir, pat.replace('USER', user))
+            pubkey = open(fn).read().strip()
+            script.append(mk_sshuser_script(user, auth_groups, pubkey))
+        return '\n'.join(script)
 
     def make_tar_filter(self, extra_defs=None):
         defs = {}
@@ -2455,7 +2528,10 @@ class VmTool(EnvScript):
 
         Usage: ${TF ! tfvar}
         """
-        state_file = self.cf.get('tf_state_file')
+        if ":" in arg:
+            state_file, arg = [s.strip() for s in arg.split(":", 1)]
+        else:
+            state_file = self.cf.get('tf_state_file')
         val = tf_load_output_var(state_file, arg)
 
         # configparser expects strings
@@ -2513,9 +2589,12 @@ class VmTool(EnvScript):
 
         Usage: ${TFAZ ! tfvar}
         """
-        state_file = self.cf.get('tf_state_file')
         if self.options.verbose:
             printf("TFAZ: %s", arg)
+        if ":" in arg:
+            state_file, arg = [s.strip() for s in arg.split(":", 1)]
+        else:
+            state_file = self.cf.get('tf_state_file')
         val = tf_load_output_var(state_file, arg)
         if not isinstance(val, list):
             raise UsageError("TFAZ function expects list param: %s" % kname)
@@ -3208,14 +3287,20 @@ class VmTool(EnvScript):
         argparam = cmd_cf.get('vmrun_arg_param', '')
 
         fullcmd = shlex.split(cmdline)
-        vm_id, args = self.get_vm_args(cmdargs)
+        vm_ids, args = self.get_vm_args(cmdargs, allow_multi=True)
         if args:
             if argparam:
                 fullcmd = fullcmd + [argparam, ' '.join(args)]
             else:
                 fullcmd = fullcmd + args
 
-        self.vm_exec_tmux(vm_id, fullcmd, title=cmd)
+        if len(vm_ids) > 1 and self.options.tmux:
+            raise UsageError("Cannot use tmux in parallel")
+
+        for vm_id in vm_ids:
+            if len(vm_ids) > 1:
+                time_printf("Running on VM %s", vm_id)
+            self.vm_exec_tmux(vm_id, fullcmd, title=cmd)
 
     def change_cwd_adv(self):
         # cd .. until there is .git
@@ -3613,6 +3698,14 @@ class VmTool(EnvScript):
                 for vrec in rec['ResourceRecords']:
                     ipmap[vrec['Value']] = rec['Name']
 
+        # consider other zones
+        for zone_id in self.cf.getlist('extra_internal_dns_zone_ids', []):
+            for rec in self.route53_iter_rrsets(HostedZoneId=zone_id):
+                if rec['Type'] not in ('A', 'AAAA'):
+                    continue
+                for vrec in rec['ResourceRecords']:
+                    ipmap[vrec['Value']] = rec['Name']
+
         return ipmap
 
     def cmd_show_tf(self):
@@ -3870,6 +3963,10 @@ class VmTool(EnvScript):
             {'Key': 'srvc_repo', 'Value': srvc_repo},
         ]
 
+        sec_extra_tags = self.cf.getdict('sec_extra_tags', {})
+        for k, v in sec_extra_tags.items():
+            secret_tags.append({'Key': k, 'Value': v})
+
         try:
             client.describe_secret(SecretId = secret_name)
             is_existing_secret = True
@@ -3951,3 +4048,194 @@ class VmTool(EnvScript):
             crt = json.loads(r_value['SecretString'])['crt'].encode('utf-8')
             with open(f'{name}/{timestamp}.crt', 'wb') as f:
                 f.write(crt)
+
+    def cmd_tag_keys(self):
+        """Tag issued certificates with extra tags.
+
+        Group: kms
+        """
+        if not self.env_name:
+            raise Exception("No env_name")
+
+        tags = []
+        sec_extra_tags = self.cf.getdict('sec_extra_tags', {})
+        for k, v in sec_extra_tags.items():
+            tags.append({'Key': k, 'Value': v})
+
+        if tags:
+            client = self.get_boto3_client('secretsmanager')
+            pager = self.pager(client, "list_secrets", "SecretList")
+            for secret in pager():
+                if secret['Name'].startswith(f'dp/{self.env_name}/'):
+                    client.tag_resource(SecretId=secret['Name'], Tags=tags)
+
+    def fetch_disk_info(self, vm_ids):
+        args = {}
+        args['Filters'] = self.get_env_filters()
+        if vm_ids:
+            args['InstanceIds'] = vm_ids
+
+        vm_list = []
+        for vm in self.ec2_iter_instances(**args):
+            vm_list.append(vm)
+        if not vm_list:
+            raise UsageError("Instance not found")
+
+        # vol_id->vol
+        vol_map = self.get_volume_map(vm_list)
+
+        # load disks from config
+        disk_map = self.get_disk_map()
+        vm_disk_names_size_order = self.cf.getlist('vm_disk_names_size_order')
+
+        final_list = []
+        for vm in vm_list:
+            if vm['State']['Name'] != 'running':
+                continue
+            final_info = {
+                'vm': vm,
+                'config_disk_map': disk_map,
+                'volume_map': {}, # name -> volume
+                'device_map': {}, # name -> DeviceName
+            }
+
+            # load disk from running vm
+            root_vol_id = None
+            cur_vol_list = []
+            dev_map = {}        # vol_id->dev_name
+            for bdev in vm.get('BlockDeviceMappings', []):
+                ebs = bdev.get('Ebs')
+                if not ebs:
+                    continue
+
+                vol = vol_map[ebs['VolumeId']]
+                vol_info = (vol['Size'], ebs['VolumeId'])
+                dev_name = bdev.get('DeviceName')
+                dev_map[ebs['VolumeId']] = dev_name
+                if dev_name in ROOT_DEV_NAMES:
+                    root_vol_id = ebs['VolumeId']
+                    final_info['volume_map']['root'] = vol
+                    final_info['device_map']['root'] = dev_name
+                else:
+                    cur_vol_list.append(vol_info)
+            if not root_vol_id:
+                raise UsageError("Root volume not found")
+
+            if len(cur_vol_list) != len(vm_disk_names_size_order):
+                raise UsageError("Number of disks does not match: cur=%r names=%r" % (cur_vol_list, vm_disk_names_size_order))
+
+            cur_vol_list.sort()
+            for nr, (size, vol_id) in enumerate(cur_vol_list):
+                vol_name = vm_disk_names_size_order[nr]
+                final_info['volume_map'][vol_name] = vol_map[vol_id]
+                final_info['device_map'][vol_name] = dev_map[vol_id]
+            final_list.append(final_info)
+
+        return final_list
+
+    def show_disk_info(self, vm_disk_info, vol_name):
+        vm = vm_disk_info['vm']
+        vol_info = vm_disk_info['volume_map'][vol_name]
+        vol_conf = vm_disk_info['config_disk_map'][vol_name]
+        dev_name = vm_disk_info['device_map'][vol_name]
+
+        cursize = vol_info['Size']
+        newsize = vol_conf['size']
+
+        print("{vm_id}/{vol_id}".format(vm_id=vm['InstanceId'], vol_id=vol_info['VolumeId']))
+
+        flag = ""
+        if newsize != cursize:
+            flag = " !!!"
+        print(f"  name: {vol_name},  device: {dev_name}")
+        print(f"  cursize: {cursize},   newsize: {newsize}{flag}")
+
+        # attachement state
+        xlist = []
+        for att in vol_info.get('Attachments', []):
+            # State/Device/InstanceId/VolumeId/DeleteOnTermination
+            xlist.append(att['State'])
+        attinfo = ",".join(xlist)
+
+        # state: 'creating'|'available'|'in-use'|'deleting'|'deleted'|'error',
+        print(f"  state: {vol_info['State']} / {attinfo}")
+
+        if vol_info.get('Iops'):
+            print(f"  iops: {vol_info['Iops']}")
+
+    def cmd_show_disks(self, *vm_ids):
+        """Show detailed volume info.
+
+        Group: info
+        """
+        vm_disk_list = self.fetch_disk_info(vm_ids)
+
+        for vm_disk_info in vm_disk_list:
+            for vol_name in vm_disk_info['volume_map']:
+                self.show_disk_info(vm_disk_info, vol_name)
+
+    def cmd_modify_disks(self, vm_id):
+        """Increase disk size
+
+        Group: admin
+        """
+        vm_disk_list = self.fetch_disk_info([vm_id])
+        client = self.get_ec2_client()
+        modified_vol_ids = []
+        for vm_info in vm_disk_list:
+            volume_map = vm_info['volume_map']
+            config_disk_map = vm_info['config_disk_map']
+
+            for vol_name in volume_map:
+                vol_info = volume_map[vol_name]
+                vol_conf = config_disk_map[vol_name]
+                cursize = vol_info['Size']
+                newsize = vol_conf['size']
+                if cursize > newsize:
+                    raise UsageError("Cannot decrease size")
+                if cursize == newsize:
+                    continue
+
+                self.show_disk_info(vm_info, vol_name)
+
+                # request size increase
+                printf("Modifying %s, newsize=%d...", vol_info['VolumeId'], newsize)
+                client.modify_volume(
+                    VolumeId=vol_info['VolumeId'],
+                    Size=newsize,
+                )
+                printf("Done")
+                modified_vol_ids.append(vol_info['VolumeId'])
+
+        iter_vol_modifications = self.pager(
+            client, 'describe_volumes_modifications', 'VolumesModifications'
+        )
+
+        # wait until complete
+        while modified_vol_ids:
+            incomplete = 0
+            for mod in iter_vol_modifications(VolumeIds=modified_vol_ids):
+                mstate = mod.get('ModificationState')
+                if not mstate:
+                    continue
+                if mstate not in (
+                    'completed', 'failed',
+                    # takes very long time but the volume is immediately usable
+                    'optimizing',
+                ):
+                    incomplete += 1
+                msg = ''
+                if mod.get("StatusMessage"):
+                    msg = "  msg={StatusMessage}".format(**mod)
+                printf(
+                    "{VolumeId}: state={ModificationState}"
+                    " oldsize={OriginalSize} newsize={TargetSize}"
+                    " progress={Progress}%{msg}".format(msg=msg, **mod))
+
+            if not incomplete:
+                break
+            printf('')
+            time.sleep(2)
+
+        time_printf("Finished")
+

@@ -12,9 +12,18 @@ import sys
 
 import botocore.session
 
+
+#
 # region code to desc maps
+#
+# https://github.com/boto/botocore/blob/develop/botocore/data/endpoints.json
+#
 AWS_ENDPOINTS = botocore.session.get_session().get_data("endpoints")
-REGION_TO_DESC = {r: rv["description"] for part in AWS_ENDPOINTS["partitions"] for r, rv in part["regions"].items()}
+REGION_TO_DESC = {
+    r: rv["description"].replace("Europe", "EU")
+    for part in AWS_ENDPOINTS["partitions"]
+        for r, rv in part["regions"].items()
+}
 REGION_TO_DESC.update({
     "ap-east-1": "Asia Pacific (Hong Kong)",
     "ap-northeast-3": "Asia Pacific (Osaka-Local)",
@@ -23,6 +32,8 @@ REGION_TO_DESC.update({
     "us-gov-east-1": "AWS GovCloud (US-East)",
     "us-gov-west-1": "AWS GovCloud (US-West)",
     "us-west-2-lax-1a": "US West (Los Angeles)",
+    "af-south-1": "Africa (Cape Town)",
+    "eu-south-1": "EU (Milan)",
 })
 DESC_TO_REGION = {v: k for k, v in REGION_TO_DESC.items()}
 
@@ -43,8 +54,11 @@ XEONS = [
     "X7 CascadeL",
 ]
 
-EPYC_V1 = "EPYC v1 Zen"
+EPYC_V1 = "E1 Naples"
+EPYC_V2 = "E2 Rome"
 
+AWS_GRAVITON = "G1 ARMv8-A"
+AWS_GRAVITON2 = "G2 ARMv8.2-A"
 
 def xeon(n, tag):
     return XEONS[n]  # + " " + tag
@@ -53,8 +67,9 @@ def xeon(n, tag):
 # map technical name to readable name
 CPU_CODES = {
     "AMD EPYC 7571": EPYC_V1,
-    "AWS Graviton Processor": "ARMv8-A",
-    "AWS Graviton2 Processor": "ARMv8.2-A",
+    "AMD EPYC 7R32": EPYC_V2,
+    "AWS Graviton Processor": AWS_GRAVITON,
+    "AWS Graviton2 Processor": AWS_GRAVITON2,
     "High Frequency Intel Xeon E7-8880 v3 (Haswell)": xeon(3, "E7-8880"),
     "Intel Skylake E5 2686 v5 (2.5 GHz)": xeon(5, "E5-2686"),
     "Intel Skylake E5 2686 v5": xeon(5, "E5-2686"),
@@ -77,6 +92,11 @@ CPU_CODES = {
     "Intel Xeon Platinum 8275L": xeon(7, "P-8275L"),
     "Intel Xeon Platinum 8275CL (Cascade Lake)": xeon(7, "P-8275CL"),
     "Variable": "Variable",
+}
+
+CCY_RATE = {
+    "USD": 1,
+    "CNY": 6.96772,
 }
 
 
@@ -105,6 +125,14 @@ def roundFloat(f):
     return float("%.02f" % f)
 
 
+def getPricePerUnit(pdim):
+    ppu = pdim["pricePerUnit"]
+    for code in CCY_RATE:
+        if code in ppu:
+            return float(ppu[code])
+    raise ValueError("Unknown currency: %r" % list(ppu))
+
+
 def getPriceMap(rec):
     """Return price as float.
     """
@@ -126,11 +154,9 @@ def getPriceMap(rec):
             if pdim.get("beginRange", "0") != "0":
                 raise ValueError("unexpected beginRange: %r" % (pdim.get("beginRange", "0"),))
             if pdim["unit"] == "Quantity":
-                priceunit = float(pdim["pricePerUnit"]["USD"])
-                price += priceunit / (nyear * 12)
+                price += getPricePerUnit(pdim) / (nyear * 12)
             elif pdim["unit"] == "Hrs":
-                priceunit = float(pdim["pricePerUnit"]["USD"])
-                price += priceunit * 24 * 30
+                price += getPricePerUnit(pdim) * 24 * 30
             else:
                 raise ValueError("bad price record: %r" % pdim)
         priceMap[rname] = price
@@ -138,7 +164,7 @@ def getPriceMap(rec):
     pdata = list(ondemand[0]["priceDimensions"].values())
     if pdata[0]["unit"] != "Hrs":
         raise Exception("invalid price unit: %r" % pdata[0]["unit"])
-    priceunit = float(pdata[0]["pricePerUnit"]["USD"])
+    priceunit = getPricePerUnit(pdata[0])
     price = priceunit * 24 * 30
     priceMap["ondemand"] = price
 
@@ -315,7 +341,7 @@ def convert(rec):
         "local": xlocal,
         "clock": xspeed,
         "note": ", ".join(notes),
-        "cpu": CPU_CODES.get(info["physicalProcessor"], info["physicalProcessor"]),
+        "cpu": CPU_CODES.get(info["physicalProcessor"], "NEW: " + info["physicalProcessor"]),
         "task": xtask,
         "ebsnet": xebsnet,
         "ecu": xecu,
@@ -387,8 +413,10 @@ def setupFilter(args):
     p.add_argument("--price", help="price range (min..max)")
     p.add_argument("--region", help="list of region (patterns)")
     p.add_argument("--ignore", help="list of vm types to ignore (patterns)")
-    p.add_argument("-s", help="standard (amd,intel,current)", action="store_true", dest="standard")
+    p.add_argument("-s", help="standard (current gen)", action="store_true", dest="standard")
     p.add_argument("-n", help="standard + ignore old vms", dest="onlynew", action="store_true")
+    p.add_argument("-x", help="x86 only (intel, amd)", dest="x86", action="store_true")
+    p.add_argument("-a", help="ARM only", dest="arm", action="store_true")
 
     g = p.add_argument_group('alternative commands')
     g.add_argument("-R", help="Show region descriptions", dest="showRegions", action="store_true")
@@ -435,7 +463,6 @@ class Filter:
 
         if ns.standard or ns.onlynew:
             self.gen = "current"
-            self.arches = ["amd", "intel"]
         if ns.onlynew:
             self.ignore_vms.append("c4.*")
             self.ignore_vms.append("d2.*")
@@ -452,6 +479,13 @@ class Filter:
             self.ignore_vms.append("i3.*")
             self.ignore_vms.append("p2.*")
             self.ignore_vms.append("p3.*")
+
+            self.ignore_vms.append("a1.*")
+
+        if ns.x86:
+            self.arches = ["amd", "intel"]
+        elif ns.arm:
+            self.arches = ["arm"]
 
         if ns.arch:
             self.arches = ns.arch.split(",")

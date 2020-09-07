@@ -2,7 +2,7 @@
 
 # run vmtool in automatically generated virtualenv
 
-CURVER=4
+CURVER=6
 PYTHON=python3
 
 script="$0"
@@ -26,10 +26,13 @@ if test -f "$ver"; then
 fi
 
 if test "$refresh" = "1"; then
+  echo "Rebuilding virtualenv based on requirements.txt..."
   rm -rf "$venv"
-  $PYTHON -m virtualenv -p "$PYTHON" "$venv"
-  echo $top
-  "$venv"/bin/pip install -r "$top/requirements.txt"
+  $PYTHON -m virtualenv --quiet -p "$PYTHON" "$venv"
+  "$venv"/bin/pip \
+    --quiet \
+    --disable-pip-version-check \
+    install -r "$top/requirements.txt"
   echo "$CURVER" > "$ver"
 fi
 
