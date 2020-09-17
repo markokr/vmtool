@@ -3472,6 +3472,19 @@ class VmTool(EnvScript):
         ])
         self.show_image_list(res['Images'], grprx)
 
+    def cmd_show_image(self, *amis):
+        """Show specific public images
+
+        Group: image
+        """
+        for ami in amis:
+            region = None
+            if ':' in ami:
+                region, ami = ami.split(":")
+            client = self.get_ec2_client(region)
+            res = client.describe_images(ImageIds=[ami])
+            self.show_image_list(res['Images'])
+
     def cmd_show_images_debian(self, *codes):
         """Show Debian images
 
