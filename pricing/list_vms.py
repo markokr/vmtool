@@ -197,7 +197,7 @@ def getNet(rec):
     parts = net.split()
     if parts[-1] == "Gigabit":
         if parts[0] in ["Up"]:
-            return "< %s" % parts[-2]
+            return "<%s" % parts[-2]
         return "%s" % parts[-2]
     return net
 
@@ -213,7 +213,7 @@ def getEbsNet(rec):
     if parts[-1] == "Mbps":
         xebsnet = "%.1f" % (float(parts[-2]) / 1000)
         if parts[0] in ("Up", "Upto"):
-            xebsnet = "< " + xebsnet
+            xebsnet = "<" + xebsnet
         return xebsnet
     return ebsnet
 
