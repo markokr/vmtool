@@ -1973,6 +1973,8 @@ class VmTool(EnvScript):
                     k = v = opt.strip()
                     if not k:
                         continue
+                    if k.startswith("ephemeral"):
+                        k = "ephemeral"
                 if k == 'size':
                     v = int(v)
                 local[k] = v
@@ -2063,8 +2065,8 @@ class VmTool(EnvScript):
                 elif k in ('enc-standard', 'enc-gp2', 'enc-st1', 'enc-sc1', 'enc-io1'):
                     ebs['VolumeType'] = k.split('-')[1]
                     ebs['Encrypted'] = True
-                elif k.startswith('ephemeral'):
-                    bdev['VirtualName'] = k
+                elif k == 'ephemeral':
+                    bdev['VirtualName'] = v
                 else:
                     eprintf("ERROR: unknown disk param: %r", k)
                     sys.exit(1)
@@ -4099,6 +4101,7 @@ class VmTool(EnvScript):
 
         # load disks from config
         disk_map = self.get_disk_map()
+
         vm_disk_names_size_order = self.cf.getlist('vm_disk_names_size_order')
 
         final_list = []
@@ -4131,11 +4134,24 @@ class VmTool(EnvScript):
                     final_info['device_map']['root'] = dev_name
                 else:
                     cur_vol_list.append(vol_info)
+
             if not root_vol_id:
                 raise UsageError("Root volume not found")
 
+            # insert local disks
+            for disk_name, disk_conf in disk_map.items():
+                eph_name = disk_conf.get('ephemeral')
+                if not eph_name:
+                    continue
+                vol_map[eph_name] = {'Size': disk_conf['size'], 'VolumeId': eph_name, 'State': eph_name}
+                dev_map[eph_name] = '/dev/%s' % eph_name
+                vol_info = (disk_conf['size'], eph_name)
+                cur_vol_list.append(vol_info)
+
+            # check if data is sane
             if len(cur_vol_list) != len(vm_disk_names_size_order):
-                raise UsageError("Number of disks does not match: cur=%r names=%r" % (cur_vol_list, vm_disk_names_size_order))
+                raise UsageError("Number of disks does not match: cur=%r names=%r" % (
+                    cur_vol_list, vm_disk_names_size_order))
 
             cur_vol_list.sort()
             for nr, (size, vol_id) in enumerate(cur_vol_list):
@@ -4168,10 +4184,12 @@ class VmTool(EnvScript):
         for att in vol_info.get('Attachments', []):
             # State/Device/InstanceId/VolumeId/DeleteOnTermination
             xlist.append(att['State'])
-        attinfo = ",".join(xlist)
+        attinfo = ""
+        if xlist:
+            attinfo = " / " + ",".join(xlist)
 
         # state: 'creating'|'available'|'in-use'|'deleting'|'deleted'|'error',
-        print(f"  state: {vol_info['State']} / {attinfo}")
+        print(f"  state: {vol_info['State']}{attinfo}")
 
         if vol_info.get('Iops'):
             print(f"  iops: {vol_info['Iops']}")
@@ -4183,7 +4201,12 @@ class VmTool(EnvScript):
         """
         vm_disk_list = self.fetch_disk_info(vm_ids)
 
+        last_vm_id = None
         for vm_disk_info in vm_disk_list:
+            if last_vm_id and last_vm_id != vm_disk_info['vm']['InstanceId']:
+                print("")
+            last_vm_id = vm_disk_info['vm']['InstanceId']
+
             for vol_name in vm_disk_info['volume_map']:
                 self.show_disk_info(vm_disk_info, vol_name)
 
