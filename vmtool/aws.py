@@ -768,6 +768,11 @@ class VmTool(EnvScript):
             printf("  Tags:")
             for tag in sorted(vm.get('Tags', []), key=lambda tag: tag['Key']):
                 printf('    %s=%s', tag['Key'], tag['Value'])
+            for k in ('State', 'StateReason', 'StateTransitionReason'):
+                if vm.get(k):
+                    printf('  %s: %s', k, vm[k])
+            if self.options.verbose > 2:
+                print_json(vm)
             printf('')
 
 
