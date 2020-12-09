@@ -1665,7 +1665,10 @@ class VmTool(EnvScript):
                 continue
 
             size = kx['Size']
-            slot = '/'.join(parts[1:3])
+            if parts[2] == 'base':
+                slot = '/'.join(parts[1:4])
+            else:
+                slot = '/'.join(parts[1:3])
             if slot not in slots:
                 slots[slot] = 0
             slots[slot] += size
