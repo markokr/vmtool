@@ -2232,9 +2232,6 @@ class VmTool(EnvScript):
         """
         self.cf.set('vm_state', VmState.PRIMARY)
 
-        if self.options.tmux:
-            raise UsageError('This command does not support tmux')
-
         primary_check_old = self.cf.getboolean('primary_check_old', False)
         primary_stop_old = self.cf.getboolean('primary_stop_old', False)
 
@@ -2253,6 +2250,12 @@ class VmTool(EnvScript):
             if not first:
                 first = vm_id
             self.do_prep(vm_id)
+
+        # skip assign if tmux was used
+        if self.options.tmux:
+            printf("VM ID: %s", ", ".join(ids))
+            printf("Skipping assign-vm, --tmux in use")
+            return first
 
         self.assign_vm(first, primary_stop_old)
 
