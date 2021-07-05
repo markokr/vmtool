@@ -617,14 +617,24 @@ def showReserved(selected):
     print(json.dumps(res, indent=2))
 
 
+def load_json(fn):
+    gzfn = fn + ".gz"
+    if os.path.isfile(gzfn):
+        with gzip.open(gzfn, 'rt') as f:
+            return json.load(f)
+    with open(fn, 'r') as f:
+        return json.load(f)
+
+
 def main():
     """Launcher.
     """
-    flt = setupFilter(sys.argv[1:])
     top = os.path.dirname(os.path.realpath(__file__))
-    src = os.path.join(top, "cache/ec2.all.json")
-    with open(src) as f:
-        data = json.load(f)
+    cache_dir = os.path.join(top, "cache")
+    cache_dir = os.environ.get("PRICING_CACHE_DIR", cache_dir)
+    flt = setupFilter(sys.argv[1:])
+    src = os.path.join(cache_dir, "ec2.all.json")
+    data = load_json(src)
     selected = [rec for rec in data if flt.match(rec)]
     selected = sorted(selected, key=getSortKey)
     if flt.showReserved:

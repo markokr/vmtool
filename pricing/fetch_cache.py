@@ -6,6 +6,7 @@
 import json
 import os
 import sys
+import gzip
 
 import boto3.session
 import botocore.session
@@ -40,7 +41,7 @@ def write_cache(fn, pclient, **kwargs):
     """Fetch and write as json.
     """
     res = get_products(pclient, **kwargs)
-    with open(fn, "w") as f:
+    with gzip.open(fn + ".gz", "wt") as f:
         json.dump(res, f, indent=2)
 
 
