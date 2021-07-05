@@ -444,15 +444,32 @@ class VmTool(EnvScript):
                 return desc
         raise Exception("did not find 'aws' partition")
 
+    VOL_TYPE_DESC = {
+        'standard': 'Magnetic',
+        'gp2': 'General Purpose',
+        'gp3': 'General Purpose',
+        'io1': 'Provisioned IOPS',
+        'io2': 'Provisioned IOPS',
+        'st1': 'Throughput Optimized HDD',
+        'sc1': 'Cold HDD',
+    }
+    VOL_TYPES = tuple(VOL_TYPE_DESC)
+    VOL_ENC_TYPES = tuple("enc-" + x for x in VOL_TYPES)
+
     def get_volume_desc(self, vol_type):
-        VMAP = {
-            'standard': 'Magnetic',
-            'gp2': 'General Purpose',
-            'io1': 'Provisioned IOPS',
-            'st1': 'Throughput Optimized HDD',
-            'sc1': 'Cold HDD',
-        }
-        return VMAP[vol_type]
+        return self.VOL_TYPE_DESC[vol_type]
+
+    STORAGE_FILTER = {
+        'STANDARD': {'productFamily': 'Storage', 'volumeType': 'Standard'},
+        'STANDARD_IA': {'productFamily': 'Storage', 'volumeType': 'Standard - Infrequent Access'},
+        'ONEZONE_IA': {'productFamily': 'Storage', 'volumeType': 'One Zone - Infrequent Access'},
+        'GLACIER': {'productFamily': 'Storage', 'volumeType': 'Amazon Glacier'},
+        # deprecated
+        'REDUCED_REDUNDANCY': {'productFamily': 'Storage', 'volumeType': 'Reduced Redundancy'},
+        # buggy pricing data
+        'DEEP_ARCHIVE': {'volumeType': 'Glacier Deep Archive'},
+        'INTELLIGENT_TIERING': {'storageClass': 'Intelligent-Tiering'},
+    }
 
     def get_storage_filter(self, storage_class):
         """Return filter for pricing query.
@@ -461,18 +478,7 @@ class VmTool(EnvScript):
         #volumeType: ['Amazon Glacier', 'Glacier Deep Archive', 'Intelligent-Tiering Frequent Access',
         #             'Intelligent-Tiering Infrequent Access', 'Intelligent-Tiering', 'One Zone - Infrequent Access',
         #             'Reduced Redundancy', 'Standard - Infrequent Access', 'Standard', 'Tags']
-        STORAGE_FILTER = {
-            'STANDARD': {'productFamily': 'Storage', 'volumeType': 'Standard'},
-            'STANDARD_IA': {'productFamily': 'Storage', 'volumeType': 'Standard - Infrequent Access'},
-            'ONEZONE_IA': {'productFamily': 'Storage', 'volumeType': 'One Zone - Infrequent Access'},
-            'GLACIER': {'productFamily': 'Storage', 'volumeType': 'Amazon Glacier'},
-            # deprecated
-            'REDUCED_REDUNDANCY': {'productFamily': 'Storage', 'volumeType': 'Reduced Redundancy'},
-            # buggy pricing data
-            'DEEP_ARCHIVE': {'volumeType': 'Glacier Deep Archive'},
-            'INTELLIGENT_TIERING': {'storageClass': 'Intelligent-Tiering'},
-        }
-        return STORAGE_FILTER[storage_class]
+        return self.STORAGE_FILTER[storage_class]
 
     def get_cached_pricing(self, **kwargs):
         """Fetch pricing for single product, cache based on filter.
@@ -2068,9 +2074,9 @@ class VmTool(EnvScript):
                     if v == 'encrypted':
                         v = '1'
                     ebs['Encrypted'] = bool(int(v))
-                elif k in ('standard', 'gp2', 'st1', 'sc1', 'io1'):
+                elif k in self.VOL_TYPES:
                     ebs['VolumeType'] = k
-                elif k in ('enc-standard', 'enc-gp2', 'enc-st1', 'enc-sc1', 'enc-io1'):
+                elif k in self.VOL_ENC_TYPES:
                     ebs['VolumeType'] = k.split('-')[1]
                     ebs['Encrypted'] = True
                 elif k == 'ephemeral':
