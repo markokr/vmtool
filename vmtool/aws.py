@@ -2068,6 +2068,10 @@ class VmTool(EnvScript):
             for k, v in disk_map[dev].items():
                 if k == 'size':
                     ebs['VolumeSize'] = int(v)
+                elif k == 'iops':
+                    ebs['Iops'] = int(v)
+                elif k == 'throughput':
+                    ebs['Throughput'] = int(v)
                 elif k == 'count':
                     count = int(v)
                 elif k == 'type':
@@ -4217,8 +4221,10 @@ class VmTool(EnvScript):
         # state: 'creating'|'available'|'in-use'|'deleting'|'deleted'|'error',
         print(f"  state: {vol_info['State']}{attinfo}")
 
-        if vol_info.get('Iops'):
-            print(f"  iops: {vol_info['Iops']}")
+        if vol_info.get('Iops') or vol_info.get('Throughput'):
+            iops = vol_info.get('Iops', '-')
+            throughput = vol_info.get('Throughput', '-')
+            print(f"  iops: {iops}, throughput: {throughput}")
 
     def cmd_show_disks(self, *vm_ids):
         """Show detailed volume info.
