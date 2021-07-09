@@ -217,11 +217,14 @@ class VmTool(EnvScript):
             size_order = []
             for dev in disk_map:
                 size = disk_map[dev].get('size')
+                count = int(disk_map[dev].get('count', '1'))
                 if size and dev not in ROOT_DEV_NAMES:
-                    size_order.append( (size, dev) )
-                    api_order.append(dev)
+                    for i in range(count):
+                        name = f"{dev}.{i}" if count > 1 else dev
+                        size_order.append( (size, i, name) )
+                        api_order.append(name)
             size_order.sort()
-            self.cf.set('vm_disk_names_size_order', ', '.join([elem[1] for elem in size_order]))
+            self.cf.set('vm_disk_names_size_order', ', '.join([elem[2] for elem in size_order]))
             self.cf.set('vm_disk_names_api_order', ', '.join(api_order))
 
     _gpg_cache = None
@@ -2060,10 +2063,13 @@ class VmTool(EnvScript):
         for dev in disk_map:
             bdev = {'DeviceName': dev}
 
+            count = 1
             ebs = {}
             for k, v in disk_map[dev].items():
                 if k == 'size':
                     ebs['VolumeSize'] = int(v)
+                elif k == 'count':
+                    count = int(v)
                 elif k == 'type':
                     # https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/EBSVolumeTypes.html
                     # Values: standard, gp2, io1, st1, sc1
@@ -2087,7 +2093,7 @@ class VmTool(EnvScript):
 
             if bdev.get('VirtualName'):
                 ebs.pop('VolumeSize', 0)
-                if ebs:
+                if ebs or count != 1:
                     eprintf("ERROR: ephemeral device cannot have EBS params: %r", ebs)
                     sys.exit(1)
             elif ebs:
@@ -2099,21 +2105,24 @@ class VmTool(EnvScript):
 
                 bdev['Ebs'] = ebs
 
-            # fill DeviceName, mainly used for root selection, otherwise mostly useless
-            if dev in ROOT_DEV_NAMES:
-                bdev['DeviceName'] = root_device_name
-                if root_device_name in ['/dev/sda1']:
-                    used_raw_devs.add(root_device_name[:-1])
+            for _ in range(count):
+                bdev = bdev.copy()
+
+                # fill DeviceName, mainly used for root selection, otherwise mostly useless
+                if dev in ROOT_DEV_NAMES:
+                    bdev['DeviceName'] = root_device_name
+                    if root_device_name in ['/dev/sda1']:
+                        used_raw_devs.add(root_device_name[:-1])
+                    else:
+                        used_raw_devs.add(root_device_name)
+                elif ebs:
+                    bdev['DeviceName'] = self.get_next_raw_device('/dev/sdf', used_raw_devs)
                 else:
-                    used_raw_devs.add(root_device_name)
-            elif ebs:
-                bdev['DeviceName'] = self.get_next_raw_device('/dev/sdf', used_raw_devs)
-            else:
-                bdev['DeviceName'] = self.get_next_raw_device('/dev/sdb', used_raw_devs)
+                    bdev['DeviceName'] = self.get_next_raw_device('/dev/sdb', used_raw_devs)
 
-            bdm.append(bdev)
+                bdm.append(bdev)
 
-            devlog.append('%s=%s' % (dev, bdev['DeviceName']))
+                devlog.append('%s=%s' % (dev, bdev['DeviceName']))
 
         time_printf("AWS=%s Env=%s Role=%s Key=%s Image=%s(%s) AZ=%d",
                     self.cf.get('aws_main_account'),
