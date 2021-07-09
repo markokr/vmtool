@@ -9,6 +9,7 @@ import json
 import os.path
 import re
 import sys
+import gzip
 
 import botocore.session
 
