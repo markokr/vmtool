@@ -18,6 +18,8 @@ import botocore.session
 # region code to desc maps
 #
 # https://github.com/boto/botocore/blob/develop/botocore/data/endpoints.json
+# https://aws.amazon.com/about-aws/global-infrastructure/localzones/locations/
+# https://aws.amazon.com/wavelength/locations/
 #
 AWS_ENDPOINTS = botocore.session.get_session().get_data("endpoints")
 REGION_TO_DESC = {
@@ -27,20 +29,53 @@ REGION_TO_DESC = {
 }
 REGION_TO_DESC.update({
     "ap-east-1": "Asia Pacific (Hong Kong)",
-    "ap-northeast-3": "Asia Pacific (Osaka-Local)",
+    "ap-northeast-3": "Asia Pacific (Osaka)",
     "eu-north-1": "EU (Stockholm)",
     "me-south-1": "Middle East (Bahrain)",
     "us-gov-east-1": "AWS GovCloud (US-East)",
     "us-gov-west-1": "AWS GovCloud (US-West)",
-    "us-west-2-lax-1a": "US West (Los Angeles)",
     "af-south-1": "Africa (Cape Town)",
     "eu-south-1": "EU (Milan)",
+
+    # AWS Local Zones
+    "us-east-1-bos-1": "US East (Boston)",
+    "us-east-1-dfw-1a": "US East (Dallas)",
+    "us-east-1-iah-1": "US East (Houston)",
+    "us-east-1-mia-1": "US East (Miami)",
+    "us-east-1-phl-1a": "US East (Philadelphia)",
+    "us-west-2-den-1a": "US West (Denver)",
+    "us-west-2-lax-1a": "US West (Los Angeles)",
+
+    # KDDI Wavelength Zones
+    "ap-northeast-1-wl1-kix-wlz-1": "Asia Pacific (KDDI) - Osaka",
+    "ap-northeast-1-wl1-nrt-wlz-1": "Asia Pacific (KDDI) - Tokyo",
+
+    # SK Telecom Wavelength Zones
+    "ap-northeast-2-wl1-cjj-wlz-1": "Asia Pacific (SKT) - Daejeon",
+
+    # Vodafone Wavelength Zones
+    "eu-west-2-wl1-lon-wlz-1": "EU West (Vodafone) - London",
+
+    # Verizon Wavelength Zones
+    "us-east-1-wl1-atl-wlz-1": "US East (Verizon) - Atlanta",
+    "us-east-1-wl1-bos-wlz-1": "US East (Verizon) - Boston",
+    "us-east-1-wl1-chi-wlz-1": "US East (Verizon) - Chicago",
+    "us-east-1-wl1-dfw-wlz-1": "US East (Verizon) - Dallas",
+    "us-east-1-wl1-iah-wlz-1": "US East (Verizon) - Houston",
+    "us-east-1-wl1-mia-wlz-1": "US East (Verizon) - Miami",
+    "us-east-1-wl1-nyc-wlz-1": "US East (Verizon) - New York",
+    "us-east-1-wl1-was-wlz-1": "US East (Verizon) - Washington DC",
+    "us-west-2-wl1-den-wlz-1": "US West (Verizon) - Denver",
+    "us-west-2-wl1-las-wlz-1": "US West (Verizon) - Las Vegas",
+    "us-west-2-wl1-phx-wlz-1": "US West (Verizon) - Phoenix",
+    "us-west-2-wl1-sea-wlz-1": "US West (Verizon) - Seattle",
+    "us-west-2-wl1-sfo-wlz-1": "US West (Verizon) - San Francisco Bay Area",
 })
 DESC_TO_REGION = {v: k for k, v in REGION_TO_DESC.items()}
 
 # CPU feature words
 CPU_FEATURES = ["AVX", "AVX2", "AVX512", "Turbo", "Deep"]
-CPU_FEATURES_HIDE = ["AVX", "Turbo"]
+CPU_FEATURES_HIDE = ["AVX", "AVX2", "Turbo", "Intel", "AMD", "ENA", "Learning", "Boost"]
 
 # human readable CPU names
 
@@ -50,16 +85,17 @@ XEONS = [
     "X2 IvyB",
     "X3 Haswell",
     "X4 Broadwell",
-    "X5 Skylake",
+    "X5 SkyL",
     "X6 KabyL",
     "X7 CascadeL",
+    "X8 IceL",
 ]
 
 EPYC_V1 = "E1 Naples"
 EPYC_V2 = "E2 Rome"
 
-AWS_GRAVITON = "G1 ARMv8-A"
-AWS_GRAVITON2 = "G2 ARMv8.2-A"
+AWS_GRAVITON = "G1 ARMv8"
+AWS_GRAVITON2 = "G2 ARMv82"
 
 def xeon(n, tag):
     return XEONS[n]  # + " " + tag
@@ -89,9 +125,12 @@ CPU_CODES = {
     "Intel Xeon Platinum 8151": xeon(5, "P-8151"),
     "Intel Xeon Platinum 8175": xeon(5, "P-8175"),
     "Intel Xeon Platinum 8175 (Skylake)": xeon(5, "P-8175"),
+    "Intel Xeon Platinum 8252": xeon(7, "P-8252"),
     "Intel Xeon Platinum 8259 (Cascade Lake)": xeon(7, "P-8259"),
     "Intel Xeon Platinum 8275L": xeon(7, "P-8275L"),
     "Intel Xeon Platinum 8275CL (Cascade Lake)": xeon(7, "P-8275CL"),
+    "Intel Xeon Scalable (Skylake)": xeon(5, "P-8176M"),
+    "Intel Xeon 8375C (Ice Lake)": xeon(8, "P-8375C"),
     "Variable": "Variable",
 }
 
@@ -120,6 +159,20 @@ RES_OPT = {
     "Partial Upfront": "part",
     "All Upfront": "upfront",
 }
+
+RES_ARG_MAP = {
+    "1": "1yr",
+    "3": "3yr",
+    "n": "none",
+    "p": "part",
+    "a": "upfront",
+    "s": "standard",
+    "c": "convertible",
+}
+
+BWMULT = {'Mbps': 1.0/1000, 'Gbps': 1.0}
+
+PRICE_KEY = "ondemand"
 
 
 def roundFloat(f):
@@ -176,7 +229,10 @@ def getPriceMap(rec):
 
 
 def getPrice(rec):
-    return getPriceMap(rec)["ondemand"]
+    pmap = getPriceMap(rec)
+    if PRICE_KEY in pmap:
+        return pmap[PRICE_KEY]
+    return -1
 
 
 def getMem(rec):
@@ -197,10 +253,14 @@ def getNet(rec):
         return OLD_NET[net]
     parts = net.split()
     if parts[-1] == "Gigabit":
-        if parts[0] in ["Up"]:
-            return "<%s" % parts[-2]
-        return "%s" % parts[-2]
-    return net
+        gbps = parts[-2]
+    elif parts[-1] == "Megabit":
+        gbps = int(parts[-2]) // 1000
+    else:
+        return net
+    if parts[0] in ["Up"]:
+        return "<%s" % gbps
+    return "%s" % gbps
 
 
 def getEbsNet(rec):
@@ -211,8 +271,8 @@ def getEbsNet(rec):
     if not ebsnet:
         return "-"
     parts = ebsnet.split()
-    if parts[-1] == "Mbps":
-        xebsnet = "%.1f" % (float(parts[-2]) / 1000)
+    if parts[-1] in BWMULT:
+        xebsnet = "%.1f" % (float(parts[-2]) * BWMULT[parts[-1]])
         if parts[0] in ("Up", "Upto"):
             xebsnet = "<" + xebsnet
         return xebsnet
@@ -236,12 +296,22 @@ def getArch(rec):
     raise Exception("unknown cpu: %s" % info["physicalProcessor"])
 
 
+CLOCK_SPEED = {
+    #"AWS Graviton2 Processor": 2.5,
+    #"Intel Xeon Scalable (Skylake)": 3.8,
+}
+
 def getClockSpeed(rec):
     """Return clock speed as float.
     """
     info = rec["product"]["attributes"]
-    speed = info.get("clockSpeed", "0 GHz").split()
-    return float(speed[-2])
+    xspeed = info.get("clockSpeed")
+    if xspeed:
+        return float(xspeed.split()[-2])
+    fspeed = CLOCK_SPEED.get(info["physicalProcessor"])
+    if fspeed is not None:
+        return fspeed
+    return -1.1
 
 
 def getLocalStorage(rec):
@@ -269,6 +339,8 @@ def getFeatures(rec):
     """
     info = rec["product"]["attributes"]
     pfeat = info.get("processorFeatures", "").replace(",", " ").replace(";", " ").split()
+    if 1:
+        return pfeat
     res = []
     for f in CPU_FEATURES:
         if f in pfeat:
@@ -289,7 +361,6 @@ def convert(rec):
     info = rec["product"]["attributes"]
     price = getPrice(rec)
     mem = getMem(rec)
-    arch = getArch(rec)
     speed = getClockSpeed(rec)
     local = getLocalStorage(rec)
     xebsnet = getEbsNet(rec)
@@ -313,7 +384,8 @@ def convert(rec):
     if info["currentGeneration"] != "Yes":
         notes.append("Obsolete")
     if info.get("enhancedNetworkingSupported") == "Yes":
-        notes.append("ENA")
+        if "ENA" not in CPU_FEATURES_HIDE:
+            notes.append("ENA")
     notes.extend([f for f in getFeatures(rec) if f not in CPU_FEATURES_HIDE])
 
     if info["ecu"] == "NA":
@@ -401,6 +473,8 @@ def fnmatchList(val, patlist):
 def setupFilter(args):
     """Parse filter args from command line.
     """
+    global PRICE_KEY
+
     p = argparse.ArgumentParser(description="List VM type info.")
     p.add_argument("--mem", help="memory range (min..max)")
     p.add_argument("--cpu", help="cpu range (min..max)")
@@ -414,10 +488,12 @@ def setupFilter(args):
     p.add_argument("--price", help="price range (min..max)")
     p.add_argument("--region", help="list of region (patterns)")
     p.add_argument("--ignore", help="list of vm types to ignore (patterns)")
+    p.add_argument("--tenancy", help="tenancy (Shared/Host/Dedicated)", default="Shared")
     p.add_argument("-s", help="standard (current gen)", action="store_true", dest="standard")
     p.add_argument("-n", help="standard + ignore old vms", dest="onlynew", action="store_true")
     p.add_argument("-x", help="x86 only (intel, amd)", dest="x86", action="store_true")
     p.add_argument("-a", help="ARM only", dest="arm", action="store_true")
+    p.add_argument("-r", help="Use reserved pricing /[13][npa][sc]/", dest="reserved")
 
     g = p.add_argument_group('alternative commands')
     g.add_argument("-R", help="Show region descriptions", dest="showRegions", action="store_true")
@@ -430,6 +506,15 @@ def setupFilter(args):
         for reg in sorted(REGION_TO_DESC):
             print("%-10s %s" % (reg, REGION_TO_DESC[reg]))
         sys.exit(0)
+
+    if ns.reserved:
+        a = ns.reserved
+        assert a[0] in "13" and a[1] in "npa" and a[2] in "sc"
+        PRICE_KEY = "reserved/%s/%s/%s" % (
+            RES_ARG_MAP[ns.reserved[0]],
+            RES_ARG_MAP[ns.reserved[2]],
+            RES_ARG_MAP[ns.reserved[1]],
+        )
     return Filter(ns)
 
 
@@ -449,6 +534,7 @@ class Filter:
         if "all" in self.region:
             self.region = None
 
+        self.tenancy = ns.tenancy.capitalize()
         self.mem_min, self.mem_max = parseRange(ns.mem)
         self.cpu_min, self.cpu_max = parseRange(ns.cpu)
         self.clock_min, self.clock_max = parseRange(ns.clock)
@@ -517,10 +603,14 @@ class Filter:
         if fnmatchList(info["instanceType"], self.ignore_vms):
             return False
 
+        if info["tenancy"] != self.tenancy:
+            return False
+        if info["capacitystatus"] != "Used":
+            return False
+
         mem = getMem(rec)
         cpu = int(info["vcpu"])
         speed = getClockSpeed(rec)
-        price = getPrice(rec)
         local = getLocalStorage(rec)[2]
         gpu = int(info.get("gpu", "0"))
         normalizationSizeFactor = info.get("normalizationSizeFactor", "NA")
@@ -535,8 +625,6 @@ class Filter:
         if speed < self.clock_min or speed > self.clock_max:
             return False
         if local < self.local_min or local > self.local_max:
-            return False
-        if price < self.price_min or price > self.price_max:
             return False
         if size < self.size_min or size > self.size_max:
             return False
@@ -561,6 +649,10 @@ class Filter:
             for f in self.features:
                 if f not in pfeat:
                     return False
+
+        price = getPrice(rec)
+        if price < self.price_min or price > self.price_max:
+            return False
 
         return True
 
