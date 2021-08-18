@@ -1,6 +1,14 @@
 #! /usr/bin/env python3
 
 """Store large API results on disk.
+
+- https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/using-pelong.html
+- https://docs.aws.amazon.com/aws-cost-management/latest/APIReference/API_pricing_GetProducts.html
+
+Bulk:
+
+- https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonEC2/current/index.json
+
 """
 
 import json
@@ -59,15 +67,20 @@ def dump_cache(pclient, region):
     REGION_DESC = get_region_desc(region)
 
     EC2_FILTER = {
-        "locationType": "AWS Region",
-        "location": REGION_DESC,
+        #"locationType": "AWS Region",   # AWS Region/AWS Outposts/AWS Local Zone/AWS Wavelength Zone
+        #"location": REGION_DESC,
         "ServiceCode": "AmazonEC2",
+        # Compute Instance, Compute Instance (bare metal),
+        # CPU Credits, Data Transfer, Dedicated Host, EBS direct API Requests,
+        # Elastic Graphics, Fast Snapshot Restore, Fee, IP Address,
+        # Load Balancer, Load Balancer-Application, Load Balancer-Network,
+        # NAT Gateway, Provisioned Throughput, Storage, Storage Snapshot, System Operation,
         "productFamily": "Compute Instance",
-        "operatingSystem": "Linux",
-        "licenseModel": "No License required",
-        "preInstalledSw": "NA",
-        "capacitystatus": "Used",
-        "tenancy": "Shared",
+        "operatingSystem": "Linux",     # NA/Linux/Windows/RHEL/SUSE/Red Hat Enterprise Linux with HA
+        "licenseModel": "No License required",  # NA/No License required/Bring your own license
+        "preInstalledSw": "NA",     # NA/SQL Web/SQL Std/SQL Ent
+        "capacitystatus": "Used",   # Used/UnusedCapacityReservation/AllocatedCapacityReservation
+        "tenancy": "Shared",        # Shared/Dedicated/Host
     }
 
     EBS_FILTER = {
