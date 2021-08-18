@@ -2057,6 +2057,7 @@ class VmTool(EnvScript):
 
         devlog = []
         bdm = []
+        ephemeral_idx = 0
 
         used_raw_devs = set()
 
@@ -2097,7 +2098,7 @@ class VmTool(EnvScript):
 
             if bdev.get('VirtualName'):
                 ebs.pop('VolumeSize', 0)
-                if ebs or count != 1:
+                if ebs:
                     eprintf("ERROR: ephemeral device cannot have EBS params: %r", ebs)
                     sys.exit(1)
             elif ebs:
@@ -2123,6 +2124,10 @@ class VmTool(EnvScript):
                     bdev['DeviceName'] = self.get_next_raw_device('/dev/sdf', used_raw_devs)
                 else:
                     bdev['DeviceName'] = self.get_next_raw_device('/dev/sdb', used_raw_devs)
+
+                if "VirtualName" in bdev:
+                    bdev["VirtualName"] = "ephemeral%d" % (ephemeral_idx,)
+                    ephemeral_idx += 1
 
                 bdm.append(bdev)
 
