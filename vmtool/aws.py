@@ -4197,11 +4197,19 @@ class VmTool(EnvScript):
 
         return final_list
 
+    def lookup_disk_config(self, vm_disk_info, vol_name):
+        if vol_name.split('.')[-1].isdigit():
+            xvol_name = '.'.join(vol_name.split('.')[:-1])
+            vol_conf = vm_disk_info['config_disk_map'][xvol_name]
+        else:
+            vol_conf = vm_disk_info['config_disk_map'][vol_name]
+        return vol_conf
+
     def show_disk_info(self, vm_disk_info, vol_name):
         vm = vm_disk_info['vm']
         vol_info = vm_disk_info['volume_map'][vol_name]
-        vol_conf = vm_disk_info['config_disk_map'][vol_name]
         dev_name = vm_disk_info['device_map'][vol_name]
+        vol_conf = self.lookup_disk_config(vm_disk_info, vol_name)
 
         cursize = vol_info['Size']
         newsize = vol_conf['size']
@@ -4257,15 +4265,14 @@ class VmTool(EnvScript):
         modified_vol_ids = []
         for vm_info in vm_disk_list:
             volume_map = vm_info['volume_map']
-            config_disk_map = vm_info['config_disk_map']
-
             for vol_name in volume_map:
                 vol_info = volume_map[vol_name]
-                vol_conf = config_disk_map[vol_name]
+                vol_conf = self.lookup_disk_config(vm_info, vol_name)
                 cursize = vol_info['Size']
                 newsize = vol_conf['size']
                 if cursize > newsize:
-                    raise UsageError("Cannot decrease size")
+                    eprintf("WARNING: cannot decrease size: vol_name=%s old=%r new=%r", vol_name, cursize, newsize)
+                    continue
                 if cursize == newsize:
                     continue
 
