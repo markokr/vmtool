@@ -39,9 +39,11 @@ REGION_TO_DESC.update({
 
     # AWS Local Zones
     "us-east-1-bos-1": "US East (Boston)",
+    "us-east-1-chi-1a": "US East (Chicago)",
     "us-east-1-dfw-1a": "US East (Dallas)",
     "us-east-1-iah-1": "US East (Houston)",
     "us-east-1-mia-1": "US East (Miami)",
+    "us-east-1-msp-1a": "US East (Minneapolis)",
     "us-east-1-phl-1a": "US East (Philadelphia)",
     "us-west-2-den-1a": "US West (Denver)",
     "us-west-2-lax-1a": "US West (Los Angeles)",
@@ -54,7 +56,7 @@ REGION_TO_DESC.update({
     "ap-northeast-2-wl1-cjj-wlz-1": "Asia Pacific (SKT) - Daejeon",
 
     # Vodafone Wavelength Zones
-    "eu-west-2-wl1-lon-wlz-1": "EU West (Vodafone) - London",
+    "eu-west-2-wl1-lon-wlz-1": "Europe (Vodafone) - London",
 
     # Verizon Wavelength Zones
     "us-east-1-wl1-atl-wlz-1": "US East (Verizon) - Atlanta",
@@ -83,8 +85,8 @@ XEONS = [
     None,
     "X1 SandyB",
     "X2 IvyB",
-    "X3 Haswell",
-    "X4 Broadwell",
+    "X3 HasW",
+    "X4 BroadW",
     "X5 SkyL",
     "X6 KabyL",
     "X7 CascadeL",
@@ -127,11 +129,22 @@ CPU_CODES = {
     "Intel Xeon Platinum 8175 (Skylake)": xeon(5, "P-8175"),
     "Intel Xeon Platinum 8252": xeon(7, "P-8252"),
     "Intel Xeon Platinum 8259 (Cascade Lake)": xeon(7, "P-8259"),
+    "Intel Xeon Platinum 8259CL": xeon(7, "P-8259CL"),
     "Intel Xeon Platinum 8275L": xeon(7, "P-8275L"),
     "Intel Xeon Platinum 8275CL (Cascade Lake)": xeon(7, "P-8275CL"),
     "Intel Xeon Scalable (Skylake)": xeon(5, "P-8176M"),
     "Intel Xeon 8375C (Ice Lake)": xeon(8, "P-8375C"),
     "Variable": "Variable",
+}
+
+# approx clock when missing
+CLOCK_SPEED = {
+    "AWS Graviton2 Processor": 2.5,
+    "Intel Xeon E5-2670": 3.3,
+    "Intel Xeon Family": 2.0,
+    "Intel Xeon Platinum 8275CL (Cascade Lake)": 3.0,
+    "Intel Xeon Scalable (Skylake)": 3.8,
+    "Variable": 2.6,
 }
 
 CCY_RATE = {
@@ -296,11 +309,6 @@ def getArch(rec):
     raise Exception("unknown cpu: %s" % info["physicalProcessor"])
 
 
-CLOCK_SPEED = {
-    #"AWS Graviton2 Processor": 2.5,
-    #"Intel Xeon Scalable (Skylake)": 3.8,
-}
-
 def getClockSpeed(rec):
     """Return clock speed as float.
     """
@@ -311,7 +319,7 @@ def getClockSpeed(rec):
     fspeed = CLOCK_SPEED.get(info["physicalProcessor"])
     if fspeed is not None:
         return fspeed
-    return -1.1
+    return 0.1
 
 
 def getLocalStorage(rec):
@@ -378,7 +386,7 @@ def convert(rec):
     if local[0] == 0:
         xlocal = "-"
     else:
-        xlocal = "%d/%d" % (local[2], local[0])
+        xlocal = "%dx%d" % (local[0], local[1])
 
     notes = []
     if info["currentGeneration"] != "Yes":
@@ -403,7 +411,9 @@ def convert(rec):
 
     nsf = info.get("normalizationSizeFactor", "NA")
     if nsf == "NA":
-        nsf = "-1"
+        nsf = "NA"
+    elif len(nsf) > 4:
+        nsf = "%.1f" % float(nsf)
 
     return {
         "instanceType": info["instanceType"],
@@ -446,7 +456,7 @@ def parseRange(v):
     """
     MANY = 1 << 24
     if not v:
-        return 0, MANY
+        return -MANY, MANY
     tmp = v.split("..")
     if len(tmp) == 1:
         r = float(v)
