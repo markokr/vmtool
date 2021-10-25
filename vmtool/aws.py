@@ -216,16 +216,16 @@ class VmTool(EnvScript):
             api_order = []
             size_order = []
             for dev in disk_map:
-                size = disk_map[dev].get('size')
-                count = int(disk_map[dev].get('count', '1'))
+                size = disk_map[dev]["size"]
+                count = disk_map[dev]["count"]
                 if size and dev not in ROOT_DEV_NAMES:
                     for i in range(count):
                         name = f"{dev}.{i}" if count > 1 else dev
                         size_order.append( (size, i, name) )
                         api_order.append(name)
             size_order.sort()
-            self.cf.set('vm_disk_names_size_order', ', '.join([elem[2] for elem in size_order]))
-            self.cf.set('vm_disk_names_api_order', ', '.join(api_order))
+            self.cf.set("vm_disk_names_size_order", ", ".join([elem[2] for elem in size_order]))
+            self.cf.set("vm_disk_names_api_order", ", ".join(api_order))
 
     _gpg_cache = None
     def load_gpg_file(self, fn):
@@ -1973,17 +1973,17 @@ class VmTool(EnvScript):
     def get_disk_map(self):
         """Parse disk_map option.
         """
-        disk_map = self.cf.getdict('disk_map', {})
+        disk_map = self.cf.getdict("disk_map", {})
         if not disk_map:
-            disk_map = {'root': 'size=12'}
+            disk_map = {"root": "size=12"}
 
         res_map = {}
         for dev in disk_map:
             val = disk_map[dev]
             local = {}
-            for opt in val.split(':'):
-                if '=' in opt:
-                    k, v = opt.split('=', 1)
+            for opt in val.split(":"):
+                if "=" in opt:
+                    k, v = opt.split("=", 1)
                     k = k.strip()
                     v = v.strip()
                 else:
@@ -1992,10 +1992,34 @@ class VmTool(EnvScript):
                         continue
                     if k.startswith("ephemeral"):
                         k = "ephemeral"
-                if k == 'size':
+                if k in ("size", "count"):
                     v = int(v)
                 local[k] = v
+            if "count" not in local:
+                local["count"] = 1
+            if "size" not in local:
+                raise UsageError("Each element in disk_map needs size")
             res_map[dev] = local
+
+        # sanity check if requested
+        disk_require_order = self.cf.getlist("disk_require_order", [])
+        if disk_require_order:
+            # order from disk_map
+            got_order = sorted([
+                (res_map[name]["size"], res_map[name]["count"], name)
+                for name in res_map
+            ])
+            names_order = [f"{name}:{count}" for size, count, name in got_order]
+
+            # order from disk_require_order
+            counted_order = [
+                key if ":" in key else key + ":1"
+                for key in disk_require_order
+            ]
+
+            if names_order != counted_order:
+                raise UsageError("Order mismatch:\n  require=%r\n  got=%r" % (counted_order, names_order))
+
         return res_map
 
     def get_next_raw_device(self, base_dev, used):
@@ -4174,18 +4198,23 @@ class VmTool(EnvScript):
                 raise UsageError("Root volume not found")
 
             # insert local disks
+            ephemeral_nr = 0
             for disk_name, disk_conf in disk_map.items():
                 eph_name = disk_conf.get('ephemeral')
                 if not eph_name:
                     continue
-                vol_map[eph_name] = {'Size': disk_conf['size'], 'VolumeId': eph_name, 'State': eph_name}
-                dev_map[eph_name] = '/dev/%s' % eph_name
-                vol_info = (disk_conf['size'], eph_name)
-                cur_vol_list.append(vol_info)
+                for nr in range(disk_conf["count"]):
+                    # ignore eph_name, too messy
+                    eph_id = f"ephemeral{ephemeral_nr}"
+                    ephemeral_nr += 1
+                    vol_map[eph_id] = {"Size": disk_conf["size"], "VolumeId": eph_id, "State": eph_name}
+                    dev_map[eph_id] = f"/dev/{eph_id}"
+                    vol_info = (disk_conf["size"], eph_id)
+                    cur_vol_list.append(vol_info)
 
             # check if data is sane
             if len(cur_vol_list) != len(vm_disk_names_size_order):
-                raise UsageError("Number of disks does not match: cur=%r names=%r" % (
+                raise UsageError("Number of disks does not match:\n  cur=%r\n  names=%r" % (
                     cur_vol_list, vm_disk_names_size_order))
 
             cur_vol_list.sort()
