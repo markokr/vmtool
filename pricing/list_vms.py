@@ -42,11 +42,15 @@ REGION_TO_DESC.update({
     "us-east-1-chi-1a": "US East (Chicago)",
     "us-east-1-dfw-1a": "US East (Dallas)",
     "us-east-1-iah-1": "US East (Houston)",
+    "us-east-1-mci-1a": "US East (Kansas City 2)",
     "us-east-1-mia-1": "US East (Miami)",
     "us-east-1-msp-1a": "US East (Minneapolis)",
+    "us-east-1-nyc-1a": "US East (New York City)",
     "us-east-1-phl-1a": "US East (Philadelphia)",
     "us-west-2-den-1a": "US West (Denver)",
+    "us-west-2-las-1a": "US West (Las Vegas)",
     "us-west-2-lax-1a": "US West (Los Angeles)",
+    "us-west-2-pdx-1a": "US West (Portland)",
 
     # KDDI Wavelength Zones
     "ap-northeast-1-wl1-kix-wlz-1": "Asia Pacific (KDDI) - Osaka",
@@ -102,6 +106,28 @@ AWS_GRAVITON2 = "G2 ARMv82"
 def xeon(n, tag):
     return XEONS[n]  # + " " + tag
 
+
+### task filter
+# c - Compute
+# f - FPGA
+# g - GPU
+# l - Machine Learning
+# m - Memory
+# n - General (normal)
+# s - Storage
+# u - Micro
+# v - Media (video)
+TASK_CODES = {
+    "Compute": "c",
+    "FPGA": "f",
+    "General": "n",
+    "GPU": "g",
+    "Machine": "l",
+    "Media": "v",
+    "Memory": "m",
+    "Micro": "u",
+    "Storage": "s",
+}
 
 # map technical name to readable name
 CPU_CODES = {
@@ -499,6 +525,7 @@ def setupFilter(args):
     p.add_argument("--region", help="list of region (patterns)")
     p.add_argument("--ignore", help="list of vm types to ignore (patterns)")
     p.add_argument("--tenancy", help="tenancy (Shared/Host/Dedicated)", default="Shared")
+    p.add_argument("--task", help="task (geNeral/Memory/Storage/Compute/Fpga/Gpu/Video/mL/Umicro)")
     p.add_argument("-s", help="standard (current gen)", action="store_true", dest="standard")
     p.add_argument("-n", help="standard + ignore old vms", dest="onlynew", action="store_true")
     p.add_argument("-x", help="x86 only (intel, amd)", dest="x86", action="store_true")
@@ -600,6 +627,8 @@ class Filter:
 
         self.showReserved = ns.showReserved
 
+        self.task = ns.task.lower() if ns.task else ""
+
     def match(self, rec):
         """Return True if record matches.
         """
@@ -663,6 +692,11 @@ class Filter:
         price = getPrice(rec)
         if price < self.price_min or price > self.price_max:
             return False
+
+        if self.task:
+            xtask = info["instanceFamily"].split()[0]
+            if TASK_CODES[xtask] not in self.task:
+                return False
 
         return True
 
@@ -748,5 +782,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (KeyboardInterrupt, IOError):
+        sys.exit(1)
 
