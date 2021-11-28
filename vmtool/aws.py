@@ -325,6 +325,7 @@ class VmTool(EnvScript):
         p.add_argument("--all", action="store_true", help="Make command work over all envs")
         p.add_argument("--ssh-key", help="Use different SSH key")
         p.add_argument("--all-role-vms", action="store_true", help="Run command on all vms for role")
+        p.add_argument("--all-role-fo-vms", action="store_true", help="Run command on all failover vms for role")
         p.add_argument("--running", action="store_true", help="Show only running instances")
         p.add_argument("--az", type=int, help="Set availability zone")
         p.add_argument("--tmux", action="store_true", help="Wrap session in tmux")
@@ -1165,6 +1166,8 @@ class VmTool(EnvScript):
     def get_primary_vms(self):
         if self.options.all_role_vms:
             return self.get_all_role_vms()
+        if self.options.all_role_fo_vms:
+            return self.get_all_role_fo_vms()
         main_vms = self._get_primary_vms()
         if main_vms:
             eprintf("Primary VM for %s is %s", self.full_role, ','.join(main_vms))
@@ -1229,6 +1232,30 @@ class VmTool(EnvScript):
             eprintf("No running VMs for %s", self.full_role)
         else:
             eprintf("Running VMs for %s: %s", self.full_role, ' '.join(all_vms))
+        return all_vms
+
+    def get_all_role_fo_vms(self):
+        if not self.role_name:
+            raise UsageError("Not in a role-based env")
+
+        main_vms = self._get_primary_vms()
+
+        all_vms = []
+        for vm in self.ec2_iter_instances(Filters=self.get_env_filters()):
+            if not self._check_tags(vm.get('Tags'), True):
+                continue
+            if vm['State']['Name'] != 'running':
+                continue
+
+            # skip primary vms
+            if vm['InstanceId'] in main_vms:
+                pass
+            else:
+                all_vms.append(vm['InstanceId'])
+        if not all_vms:
+            eprintf("No running failover VMs for %s", self.full_role)
+        else:
+            eprintf("Running failover VMs for %s: %s", self.full_role, ' '.join(all_vms))
         return all_vms
 
     def _check_tags(self, taglist, force_role=False, role_name=None):
