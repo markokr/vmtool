@@ -2465,22 +2465,28 @@ class VmTool(EnvScript):
 
         Group: admin
         """
-        vm_id, args = self.get_vm_args(args)
-        if len(args) == 1:
-            self.vm_exec_tmux(vm_id, args[0], title="ssh")
-        else:
-            self.vm_exec_tmux(vm_id, args or [], title="ssh")
+        vm_ids, args = self.get_vm_args(args, allow_multi=True)
+        for vm_id in vm_ids:
+            if len(vm_ids) > 1:
+                time_printf("Running on VM %s", vm_id)
+            if len(args) == 1:
+                self.vm_exec_tmux(vm_id, args[0], title="ssh")
+            else:
+                self.vm_exec_tmux(vm_id, args or [], title="ssh")
 
     def cmd_ssh_admin(self, *args):
         """SSH to VM and run command (optional).
 
         Group: admin
         """
-        vm_id, args = self.get_vm_args(args)
-        if len(args) == 1:
-            self.vm_exec_tmux(vm_id, args[0], use_admin=True, title="ssh-admin")
-        else:
-            self.vm_exec_tmux(vm_id, args or [], use_admin=True, title="ssh-admin")
+        vm_ids, args = self.get_vm_args(args, allow_multi=True)
+        for vm_id in vm_ids:
+            if len(vm_ids) > 1:
+                time_printf("Running on VM %s", vm_id)
+            if len(args) == 1:
+                self.vm_exec_tmux(vm_id, args[0], use_admin=True, title="ssh-admin")
+            else:
+                self.vm_exec_tmux(vm_id, args or [], use_admin=True, title="ssh-admin")
 
     def cmd_rsync(self, *args):
         """Use rsync to transport files.
