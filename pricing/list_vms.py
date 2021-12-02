@@ -467,7 +467,7 @@ TABLE_FORMAT = {
     "Region": "{region:<}",
     "Price/m": "{price:.02f}",
     "vCPU": "{vcpu}",
-    "ECU": "{ecu}",
+    #"ECU": "{ecu}",
     "Clock": "{clock}",
     "Mem": "{mem}",
     "NetBW": "{net}",
