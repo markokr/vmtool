@@ -99,6 +99,7 @@ XEONS = [
 
 EPYC_V1 = "E1 Naples"
 EPYC_V2 = "E2 Rome"
+EPYC_V3 = "E3 Milan"
 
 AWS_GRAVITON = "G1 ARMv8"
 AWS_GRAVITON2 = "G2 ARMv82"
@@ -133,6 +134,7 @@ TASK_CODES = {
 CPU_CODES = {
     "AMD EPYC 7571": EPYC_V1,
     "AMD EPYC 7R32": EPYC_V2,
+    "AMD EPYC 7R13 Processor": EPYC_V3,
     "AWS Graviton Processor": AWS_GRAVITON,
     "AWS Graviton2 Processor": AWS_GRAVITON2,
     "High Frequency Intel Xeon E7-8880 v3 (Haswell)": xeon(3, "E7-8880"),
