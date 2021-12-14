@@ -18,6 +18,7 @@ import botocore.session
 # region code to desc maps
 #
 # https://github.com/boto/botocore/blob/develop/botocore/data/endpoints.json
+# https://aws.amazon.com/about-aws/global-infrastructure/regions_az/
 # https://aws.amazon.com/about-aws/global-infrastructure/localzones/locations/
 # https://aws.amazon.com/wavelength/locations/
 #
@@ -30,6 +31,7 @@ REGION_TO_DESC = {
 REGION_TO_DESC.update({
     "ap-east-1": "Asia Pacific (Hong Kong)",
     "ap-northeast-3": "Asia Pacific (Osaka)",
+    "ap-southeast-3": "Asia Pacific (Jakarta)",
     "eu-north-1": "EU (Stockholm)",
     "me-south-1": "Middle East (Bahrain)",
     "us-gov-east-1": "AWS GovCloud (US-East)",
@@ -60,6 +62,9 @@ REGION_TO_DESC.update({
     "ap-northeast-2-wl1-cjj-wlz-1": "Asia Pacific (SKT) - Daejeon",
 
     # Vodafone Wavelength Zones
+    "eu-central-1-wl1-ber-wlz-1": "Europe (Vodafone) - Berlin",
+    "eu-central-1-wl1-dtm-wlz-1": "Europe (Vodafone) - Dortmund",
+    "eu-central-1-wl1-muc-wlz-1": "Europe (Vodafone) - Munich",
     "eu-west-2-wl1-lon-wlz-1": "Europe (Vodafone) - London",
 
     # Verizon Wavelength Zones
