@@ -326,6 +326,8 @@ class VmTool(EnvScript):
         p.add_argument("--ssh-key", help="Use different SSH key")
         p.add_argument("--all-role-vms", action="store_true", help="Run command on all vms for role")
         p.add_argument("--all-role-fo-vms", action="store_true", help="Run command on all failover vms for role")
+        p.add_argument("--earlier-fo-vms", action="store_true", help="Run command on earlier failover vms for role")
+        p.add_argument("--latest-fo-vm", action="store_true", help="Run command on latest failover vm for rolw")
         p.add_argument("--running", action="store_true", help="Show only running instances")
         p.add_argument("--az", type=int, help="Set availability zone")
         p.add_argument("--tmux", action="store_true", help="Wrap session in tmux")
@@ -1166,8 +1168,9 @@ class VmTool(EnvScript):
     def get_primary_vms(self):
         if self.options.all_role_vms:
             return self.get_all_role_vms()
-        if self.options.all_role_fo_vms:
+        if self.options.all_role_fo_vms or self.options.earlier_fo_vms or self.options.latest_fo_vm:
             return self.get_all_role_fo_vms()
+
         main_vms = self._get_primary_vms()
         if main_vms:
             eprintf("Primary VM for %s is %s", self.full_role, ','.join(main_vms))
@@ -1254,8 +1257,15 @@ class VmTool(EnvScript):
                 all_vms.append(vm['InstanceId'])
         if not all_vms:
             eprintf("No running failover VMs for %s", self.full_role)
+        elif self.options.earlier_fo_vms and len(all_vms) > 1:
+            all_vms = all_vms[:-1]
+            eprintf("No running earlier failover VMs for %s: %s", self.full_role, ' '.join(all_vms))
+        elif self.options.latest_fo_vm:
+            all_vms = all_vms[-1:]
+            eprintf("No running latest failover VM for %s: %s", self.full_role, ' '.join(all_vms))
         else:
             eprintf("Running failover VMs for %s: %s", self.full_role, ' '.join(all_vms))
+
         return all_vms
 
     def _check_tags(self, taglist, force_role=False, role_name=None):
@@ -3327,6 +3337,18 @@ class VmTool(EnvScript):
             show_commits(self.old_commit, self.new_commit, [], self.git_dir)
 
         return old_primary
+
+    def cmd_drop_old_node(self, *args):
+        """Drop old failover nodes
+
+        Group: admin
+        """
+        main_vms = self._get_primary_vms()
+        vm_ids, args = self.get_vm_args(args, allow_multi=True)
+        for vm_id in vm_ids:
+            if vm_id in main_vms:
+                raise UsageError('This command should not drop primary VM')
+            self.cmd_drop_node(vm_id)
 
     def cmd_drop_node(self, vm_id):
         """Drop database node from cascade.
