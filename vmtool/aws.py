@@ -1257,8 +1257,11 @@ class VmTool(EnvScript):
                 all_vms.append(vm['InstanceId'])
         if not all_vms:
             eprintf("No running failover VMs for %s", self.full_role)
-        elif self.options.earlier_fo_vms and len(all_vms) > 1:
-            all_vms = all_vms[:-1]
+        elif self.options.earlier_fo_vms:
+            if  len(all_vms) == 1:
+                all_vms = []
+            else:
+                all_vms = all_vms[:-1]
             eprintf("No running earlier failover VMs for %s: %s", self.full_role, ' '.join(all_vms))
         elif self.options.latest_fo_vm:
             all_vms = all_vms[-1:]
