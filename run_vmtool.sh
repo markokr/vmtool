@@ -2,7 +2,7 @@
 
 # run vmtool in automatically generated virtualenv
 
-CURVER=7
+CURVER=8
 PYTHON=python3
 
 script="$0"
@@ -28,7 +28,7 @@ fi
 if test "$refresh" = "1"; then
   echo "Rebuilding virtualenv based on requirements.txt..."
   rm -rf "$venv"
-  $PYTHON -m virtualenv --quiet -p "$PYTHON" "$venv"
+  $PYTHON -m venv "$venv"
   "$venv"/bin/pip \
     --quiet \
     --disable-pip-version-check \
