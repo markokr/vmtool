@@ -3863,10 +3863,13 @@ class VmTool(EnvScript):
 
         fail = 0
         for sect in sorted(self.cf.sections()):
-            printf('[%s]', sect)
+            sect_header = f'[{sect}]'
             for k in sorted(self.cf.cf.options(sect)):
                 if args and k not in args:
                     continue
+                if sect_header:
+                    printf(sect_header)
+                    sect_header = ''
                 try:
                     raw = self.cf.cf.get(sect, k, raw=True)
                     v = self.cf.cf.get(sect, k)
@@ -3883,7 +3886,8 @@ class VmTool(EnvScript):
                 except Exception as ex:
                     fail = 1
                     eprintf("### ERROR ### key: '%s.%s' err: %s", sect, k, str(ex))
-            printf('')
+            if not sect_header:
+                printf('')
         if fail:
             sys.exit(fail)
 
