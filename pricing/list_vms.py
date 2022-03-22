@@ -166,6 +166,7 @@ CPU_CODES = {
     "Intel Xeon Platinum 8275L": xeon(7, "P-8275L"),
     "Intel Xeon Platinum 8275CL (Cascade Lake)": xeon(7, "P-8275CL"),
     "Intel Xeon Scalable (Skylake)": xeon(5, "P-8176M"),
+    "Intel Xeon Scalable (Icelake)": xeon(8, "P-8375C?"),
     "Intel Xeon 8375C (Ice Lake)": xeon(8, "P-8375C"),
     "Variable": "Variable",
 }
