@@ -2032,7 +2032,7 @@ class VmTool(EnvScript):
                         continue
                     if k.startswith("ephemeral"):
                         k = "ephemeral"
-                if k in ("size", "count"):
+                if k in ("size", "count", "iops", "throughput"):
                     v = int(v)
                 local[k] = v
             if "count" not in local:
@@ -4325,10 +4325,30 @@ class VmTool(EnvScript):
         # state: 'creating'|'available'|'in-use'|'deleting'|'deleted'|'error',
         print(f"  state: {vol_info['State']}{attinfo}")
 
-        if vol_info.get('Iops') or vol_info.get('Throughput'):
-            iops = vol_info.get('Iops', '-')
-            throughput = vol_info.get('Throughput', '-')
-            print(f"  iops: {iops}, throughput: {throughput}")
+        if vol_info.get('Iops'):
+            curiops = vol_info['Iops']
+            newiops = vol_conf.get('iops')
+
+            if not newiops:
+                newiops = curiops
+
+            flag = ""
+            if newiops != curiops:
+                flag = " !!!"
+            print(f"  curiops: {curiops},   newiops: {newiops}{flag}")
+
+        if vol_info.get('Throughput'):
+            curthroughput = vol_info['Throughput']
+            newthroughput = vol_conf.get('throughput')
+
+            if not newthroughput:
+                newthroughput = curthroughput
+
+            flag = ""
+            if newthroughput != curthroughput:
+                flag = " !!!"
+            print(f"  curthroughput: {curthroughput},   newthroughput: {newthroughput}{flag}")
+
 
     def cmd_show_disks(self, *vm_ids):
         """Show detailed volume info.
@@ -4357,24 +4377,40 @@ class VmTool(EnvScript):
         for vm_info in vm_disk_list:
             volume_map = vm_info['volume_map']
             for vol_name in volume_map:
+                modify_args = {}
+                logmsg = ""
+
                 vol_info = volume_map[vol_name]
                 vol_conf = self.lookup_disk_config(vm_info, vol_name)
-                cursize = vol_info['Size']
-                newsize = vol_conf['size']
-                if cursize > newsize:
-                    eprintf("WARNING: cannot decrease size: vol_name=%s old=%r new=%r", vol_name, cursize, newsize)
+
+                for k, v in vol_conf.items():
+                    if k == 'size':
+                        if v < vol_info['Size']:
+                            eprintf("WARNING: cannot decrease size: vol_name=%s old=%r new=%r", vol_name, vol_info['Size'], v)
+                            continue
+                        if v != vol_info['Size']:
+                            modify_args['Size'] = v
+                            logmsg += ", newsize=%d" % (v)
+                    elif k == 'iops':
+                        if v != vol_info['Iops']:
+                            modify_args['Iops'] = v
+                            logmsg += ", newiops=%d" % (v)
+                    elif k == 'throughput':
+                        if v != vol_info['Throughput']:
+                            modify_args['Throughput'] = v
+                            logmsg += ", newthroughput=%d" % (v)
+
+                if not modify_args:
                     continue
-                if cursize == newsize:
-                    continue
+
+                modify_args['VolumeId'] = vol_info['VolumeId']
 
                 self.show_disk_info(vm_info, vol_name)
 
                 # request size increase
-                printf("Modifying %s, newsize=%d...", vol_info['VolumeId'], newsize)
-                client.modify_volume(
-                    VolumeId=vol_info['VolumeId'],
-                    Size=newsize,
-                )
+                printf("Modifying %s%s", vol_info['VolumeId'], logmsg)
+
+                client.modify_volume(**modify_args)
                 printf("Done")
                 modified_vol_ids.append(vol_info['VolumeId'])
 
@@ -4401,6 +4437,8 @@ class VmTool(EnvScript):
                 printf(
                     "{VolumeId}: state={ModificationState}"
                     " oldsize={OriginalSize} newsize={TargetSize}"
+                    " oldiops={OriginalIops} newiops={TargetIops}"
+                    " oldthroughput={OriginalThroughput} newthroughput={TargetThroughput}"
                     " progress={Progress}%{msg}".format(msg=msg, **mod))
 
             if not incomplete:
