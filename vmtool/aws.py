@@ -4305,12 +4305,33 @@ class VmTool(EnvScript):
         cursize = vol_info['Size']
         newsize = vol_conf['size']
 
+        # ephemeral disks do not have VolumeType property
+        if vol_info.get("VolumeType"):
+            curtype = vol_info['VolumeType']
+        else:
+            curtype = vol_info['State']
+
+        newtype = None
+        for k, v in vol_conf.items():
+            if k == 'type':
+                newtype = v
+            elif k in self.VOL_TYPES:
+                newtype = k
+            elif k in self.VOL_ENC_TYPES:
+                newtype = k.split('-')[1]
+        if not newtype:
+            newtype = curtype
+
         print("{vm_id}/{vol_id}".format(vm_id=vm['InstanceId'], vol_id=vol_info['VolumeId']))
 
+        print(f"  name: {vol_name},  device: {dev_name}")
+        flag = ""
+        if newtype != curtype:
+            flag = " !!!"
+        print(f"  type: {curtype},  newtype: {newtype}{flag}")
         flag = ""
         if newsize != cursize:
             flag = " !!!"
-        print(f"  name: {vol_name},  device: {dev_name}")
         print(f"  cursize: {cursize},   newsize: {newsize}{flag}")
 
         # attachement state
@@ -4337,12 +4358,15 @@ class VmTool(EnvScript):
                 flag = " !!!"
             print(f"  curiops: {curiops},   newiops: {newiops}{flag}")
 
-        if vol_info.get('Throughput'):
-            curthroughput = vol_info['Throughput']
+        if vol_info.get('Throughput') or vol_conf.get('throughput'):
+            curthroughput = vol_info.get('Throughput')
             newthroughput = vol_conf.get('throughput')
 
             if not newthroughput:
                 newthroughput = curthroughput
+            # some VolumeTypes do not return current througput
+            if not curthroughput:
+                curthroughput = "-"
 
             flag = ""
             if newthroughput != curthroughput:
@@ -4379,6 +4403,7 @@ class VmTool(EnvScript):
             for vol_name in volume_map:
                 modify_args = {}
                 logmsg = ""
+                newtype = None
 
                 vol_info = volume_map[vol_name]
                 vol_conf = self.lookup_disk_config(vm_info, vol_name)
@@ -4396,9 +4421,27 @@ class VmTool(EnvScript):
                             modify_args['Iops'] = v
                             logmsg += ", newiops=%d" % (v)
                     elif k == 'throughput':
-                        if v != vol_info['Throughput']:
+                        if v != vol_info.get('Throughput'):
                             modify_args['Throughput'] = v
                             logmsg += ", newthroughput=%d" % (v)
+                    elif k == 'type':
+                        newtype = v
+                    elif k in self.VOL_TYPES:
+                        newtype = k
+                    elif k in self.VOL_ENC_TYPES:
+                        newtype = k.split('-')[1]
+
+                if newtype and newtype != vol_info['VolumeType']:
+                    modify_args['VolumeType'] = newtype
+                    logmsg += ", newtype=%s" % (newtype)
+
+                    # Iops is required input for io1 and io2, regardless what boto3 documentation says
+                    if newtype in ('io1', 'io2') and not modify_args.get('Iops'):
+                        if not vol_conf.get('iops'):
+                            eprintf("WARNING: cannot modify to %s without specifying IOPS: vol_name=%s", newtype, vol_name)
+                            continue
+                        modify_args['Iops'] = vol_conf['iops']
+
 
                 if not modify_args:
                     continue
@@ -4409,7 +4452,6 @@ class VmTool(EnvScript):
 
                 # request size increase
                 printf("Modifying %s%s", vol_info['VolumeId'], logmsg)
-
                 client.modify_volume(**modify_args)
                 printf("Done")
                 modified_vol_ids.append(vol_info['VolumeId'])
@@ -4431,15 +4473,19 @@ class VmTool(EnvScript):
                     'optimizing',
                 ):
                     incomplete += 1
-                msg = ''
+                msgstatus = ''
                 if mod.get("StatusMessage"):
-                    msg = "  msg={StatusMessage}".format(**mod)
+                    msgstatus = "  msg={StatusMessage}".format(**mod)
+                # throughputs are not available for some volume types
+                msgtarget = ''
+                if mod.get("TargetThroughput") and mod.get("OriginalThroughput"):
+                    msgtarget = " oldthroughput={OriginalThroughput} newthroughput={TargetThroughput}".format(**mod)
                 printf(
                     "{VolumeId}: state={ModificationState}"
                     " oldsize={OriginalSize} newsize={TargetSize}"
                     " oldiops={OriginalIops} newiops={TargetIops}"
-                    " oldthroughput={OriginalThroughput} newthroughput={TargetThroughput}"
-                    " progress={Progress}%{msg}".format(msg=msg, **mod))
+                    "{msgtarget}"
+                    " progress={Progress}%{msgstatus}".format(msgstatus=msgstatus, msgtarget=msgtarget, **mod))
 
             if not incomplete:
                 break
