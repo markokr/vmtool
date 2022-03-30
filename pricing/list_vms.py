@@ -29,17 +29,18 @@ REGION_TO_DESC = {
         for r, rv in part["regions"].items()
 }
 REGION_TO_DESC.update({
+    "af-south-1": "Africa (Cape Town)",
     "ap-east-1": "Asia Pacific (Hong Kong)",
     "ap-northeast-3": "Asia Pacific (Osaka)",
     "ap-southeast-3": "Asia Pacific (Jakarta)",
     "eu-north-1": "EU (Stockholm)",
+    "eu-south-1": "EU (Milan)",
     "me-south-1": "Middle East (Bahrain)",
     "us-gov-east-1": "AWS GovCloud (US-East)",
     "us-gov-west-1": "AWS GovCloud (US-West)",
-    "af-south-1": "Africa (Cape Town)",
-    "eu-south-1": "EU (Milan)",
 
     # AWS Local Zones
+    "us-east-1-atl-1a": "US East (Atlanta)",
     "us-east-1-bos-1": "US East (Boston)",
     "us-east-1-chi-1a": "US East (Chicago)",
     "us-east-1-dfw-1a": "US East (Dallas)",
@@ -53,6 +54,8 @@ REGION_TO_DESC.update({
     "us-west-2-las-1a": "US West (Las Vegas)",
     "us-west-2-lax-1a": "US West (Los Angeles)",
     "us-west-2-pdx-1a": "US West (Portland)",
+    "us-west-2-phx-1a": "US West (Phoenix)",
+    "us-west-2-sea-1a": "US West (Seattle)",
 
     # KDDI Wavelength Zones
     "ap-northeast-1-wl1-kix-wlz-1": "Asia Pacific (KDDI) - Osaka",
@@ -71,13 +74,17 @@ REGION_TO_DESC.update({
     "us-east-1-wl1-atl-wlz-1": "US East (Verizon) - Atlanta",
     "us-east-1-wl1-bos-wlz-1": "US East (Verizon) - Boston",
     "us-east-1-wl1-chi-wlz-1": "US East (Verizon) - Chicago",
+    "us-east-1-wl1-clt-wlz-1": "US East (Verizon) - Charlotte",
     "us-east-1-wl1-dfw-wlz-1": "US East (Verizon) - Dallas",
+    "us-east-1-wl1-dtw-wlz-1": "US East (Verizon) - Detroit",
     "us-east-1-wl1-iah-wlz-1": "US East (Verizon) - Houston",
     "us-east-1-wl1-mia-wlz-1": "US East (Verizon) - Miami",
+    "us-east-1-wl1-msp-wlz-1": "US East (Verizon) - Minneapolis",
     "us-east-1-wl1-nyc-wlz-1": "US East (Verizon) - New York",
     "us-east-1-wl1-was-wlz-1": "US East (Verizon) - Washington DC",
     "us-west-2-wl1-den-wlz-1": "US West (Verizon) - Denver",
     "us-west-2-wl1-las-wlz-1": "US West (Verizon) - Las Vegas",
+    "us-west-2-wl1-lax-wlz-1": "US West (Verizon) - Los Angeles",
     "us-west-2-wl1-phx-wlz-1": "US West (Verizon) - Phoenix",
     "us-west-2-wl1-sea-wlz-1": "US West (Verizon) - Seattle",
     "us-west-2-wl1-sfo-wlz-1": "US West (Verizon) - San Francisco Bay Area",
