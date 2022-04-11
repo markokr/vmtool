@@ -4440,7 +4440,7 @@ class VmTool(EnvScript):
                     if newtype in ('io1', 'io2') and not modify_args.get('Iops'):
                         if not vol_conf.get('iops'):
                             eprintf("WARNING: cannot modify to %s without specifying IOPS: vol_name=%s", newtype, vol_name)
-                            skip = True
+                            continue
                         modify_args['Iops'] = vol_conf['iops']
 
 
