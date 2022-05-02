@@ -4402,6 +4402,7 @@ class VmTool(EnvScript):
             volume_map = vm_info['volume_map']
             for vol_name in volume_map:
                 modify_args = {}
+                skip = False
                 logmsg = ""
                 newtype = None
 
@@ -4412,7 +4413,7 @@ class VmTool(EnvScript):
                     if k == 'size':
                         if v < vol_info['Size']:
                             eprintf("WARNING: cannot decrease size: vol_name=%s old=%r new=%r", vol_name, vol_info['Size'], v)
-                            continue
+                            skip = True
                         if v != vol_info['Size']:
                             modify_args['Size'] = v
                             logmsg += ", newsize=%d" % (v)
@@ -4439,11 +4440,12 @@ class VmTool(EnvScript):
                     if newtype in ('io1', 'io2') and not modify_args.get('Iops'):
                         if not vol_conf.get('iops'):
                             eprintf("WARNING: cannot modify to %s without specifying IOPS: vol_name=%s", newtype, vol_name)
+                            skip = True
                             continue
                         modify_args['Iops'] = vol_conf['iops']
 
 
-                if not modify_args:
+                if skip or not modify_args:
                     continue
 
                 modify_args['VolumeId'] = vol_info['VolumeId']
