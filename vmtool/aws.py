@@ -29,6 +29,7 @@ from fnmatch import fnmatch
 import boto3.session
 import boto3.s3.transfer
 import botocore.session
+import botocore.config
 
 from vmtool.certs import load_cert_config
 from vmtool.config import Config, NoOptionError
@@ -358,7 +359,8 @@ class VmTool(EnvScript):
         scode = (region, svc)
         if scode not in self._boto_clients:
             session = self.get_boto3_session(region)
-            self._boto_clients[scode] = session.client(svc)
+            conf = botocore.config.Config(retries = {'mode': 'adaptive', 'max_attempts': 10})
+            self._boto_clients[scode] = session.client(svc, config=conf)
         return self._boto_clients[scode]
 
     def get_elb(self, region=None):
