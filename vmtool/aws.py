@@ -833,7 +833,10 @@ class VmTool(EnvScript):
             f.write(kdata + "\n")
         return fn
 
-    def ssh_cmdline(self, use_admin=False):
+    def get_ssh_known_hosts_file(self, vm_id):
+        return self.ssh_known_hosts + '_' + vm_id
+
+    def ssh_cmdline(self, vm_id, use_admin=False):
         if self.cf.getboolean('ssh_admin_user_disabled', False):
             ssh_user = self.cf.get('user')
         elif use_admin:
@@ -848,7 +851,7 @@ class VmTool(EnvScript):
         ssh_options = shlex.split(self.cf.get('ssh_options', ''))
 
         return ['ssh', ssh_debug, '-i', self.get_ssh_kfile(), '-l', ssh_user,
-                '-o', 'UserKnownHostsFile=' + self.ssh_known_hosts] + ssh_options
+                '-o', 'UserKnownHostsFile=' + self.get_ssh_known_hosts_file(vm_id)] + ssh_options
 
     def vm_exec_tmux(self, vm_id, cmdline, use_admin=False, title=None):
         if self.options.tmux:
@@ -866,7 +869,7 @@ class VmTool(EnvScript):
         if not self.cf.getboolean('ssh_user_access_works', False):
             use_admin = True
 
-        ssh = self.ssh_cmdline(use_admin=use_admin)
+        ssh = self.ssh_cmdline(vm_id, use_admin=use_admin)
 
         if not stdin and not get_output and sys.stdout.isatty():        # pylint:disable=no-member
             ssh.append('-t')
@@ -951,7 +954,7 @@ class VmTool(EnvScript):
             nargs.append(a)
             ids.append(vm_id)
 
-        ssh_list = self.ssh_cmdline(use_admin=use_admin)
+        ssh_list = self.ssh_cmdline(vm_id, use_admin=use_admin)
         ssh_cmd = ' '.join(rsh_quote(ssh_list))
 
         cmd = ['rsync', '-rtz', '-e', ssh_cmd]
@@ -1019,14 +1022,14 @@ class VmTool(EnvScript):
 
             if pub_ip:
                 for tag in ssh_tags:
-                    ssh_add_known_host(self.ssh_known_hosts, pub_dns, pub_ip,
+                    ssh_add_known_host(self.get_ssh_known_hosts_file(vm_id), pub_dns, pub_ip,
                                        tag['Key'], tag['Value'], vm_id)
 
             priv_dns = vm.get('PrivateDnsName') or None
             priv_ip = vm.get('PrivateIpAddress')
             if priv_ip:
                 for tag in ssh_tags:
-                    ssh_add_known_host(self.ssh_known_hosts, priv_dns, priv_ip,
+                    ssh_add_known_host(self.get_ssh_known_hosts_file(vm_id), priv_dns, priv_ip,
                                        tag['Key'], tag['Value'], vm_id)
 
     def put_known_host_from_tags(self, vm_id):
@@ -1062,7 +1065,7 @@ class VmTool(EnvScript):
         dns = None
         for k, v in old_keys + new_keys:
             for ip in iplist:
-                ssh_add_known_host(self.ssh_known_hosts, dns, ip, k, v, vm_id)
+                ssh_add_known_host(self.get_ssh_known_hosts_file(vm_id), dns, ip, k, v, vm_id)
 
     def get_env_filters(self):
         """Return default filters based on command-line swithces.
