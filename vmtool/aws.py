@@ -1259,7 +1259,8 @@ class VmTool(EnvScript):
             if vm['InstanceId'] in main_vms:
                 pass
             else:
-                all_vms.append(vm['InstanceId'])
+                all_vms.append(vm)
+        all_vms = [it['InstanceId'] for it in sorted(all_vms, key=lambda it: it['LaunchTime'])]
         if not all_vms:
             eprintf("No running failover VMs for %s", self.full_role)
         elif self.options.earlier_fo_vms:
