@@ -2269,6 +2269,7 @@ class VmTool(EnvScript):
             {'Key': 'Env', 'Value': self.env_name},
             {'Key': 'Commit', 'Value': self.new_commit},
             {'Key': 'Date', 'Value': time.strftime("%Y%m%d")},
+            {'Key': 'VmState', 'Value': VmState.SECONDARY},
         ]
         if self.role_name:
             tags.append({'Key': 'Role', 'Value': self.role_name})
@@ -2352,6 +2353,7 @@ class VmTool(EnvScript):
             return first
 
         self.assign_vm(first, primary_stop_old)
+        self.cmd_tag_vmstate()
 
         end = time.time()
         printf("VM ID: %s", ", ".join(ids))
@@ -3076,6 +3078,7 @@ class VmTool(EnvScript):
         Group: vm
         """
         self.assign_vm(vm_id, False)
+        self.cmd_tag_vmstate()
 
     def get_private_iface(self, vm_id):
         last_idx = None
@@ -3270,6 +3273,7 @@ class VmTool(EnvScript):
             self.modcmd_run(cmd, [secondary_id])
 
         self.raw_assign_vm(secondary_id)
+        self.cmd_tag_vmstate()
 
         return secondary_id
 
@@ -3318,6 +3322,8 @@ class VmTool(EnvScript):
             self.modcmd_run(cmd, [secondary_id])
 
         self.raw_assign_vm(secondary_id)
+        self.cmd_tag_vmstate()
+
         return primary_id
 
     def cmd_full_upgrade(self):
@@ -4502,3 +4508,25 @@ class VmTool(EnvScript):
 
         time_printf("Finished")
 
+    def cmd_tag_vmstate(self):
+        """Set VmState tag to vm.
+
+        Group: vm
+        """
+        if not self.env_name:
+            raise Exception("No env_name")
+
+        if not self.role_name:
+            raise Exception("No role_name")
+
+        primary_vms = self._get_primary_vms()
+        client = self.get_ec2_client()
+
+        for vm in self.ec2_iter_instances(Filters=self.get_env_filters()):
+            if vm['InstanceId'] in primary_vms:
+                vm_state = VmState.PRIMARY
+            else:
+                vm_state = VmState.SECONDARY
+
+            tags = [{'Key': 'VmState', 'Value': vm_state}]
+            client.create_tags(Resources=[vm['InstanceId']], Tags=tags)
