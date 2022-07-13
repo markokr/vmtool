@@ -324,6 +324,23 @@ def getNet(rec):
         return "<%s" % gbps
     return "%s" % gbps
 
+def getNetBW(rec):
+    """Return network bandwidth in Gbps.
+    """
+    info = rec["product"]["attributes"]
+    net = info.get("networkPerformance")
+    if not net:
+        return "-"
+    if net in OLD_NET:
+        return float(OLD_NET[net].replace('~', ''))
+    parts = net.split()
+    if parts[-1] == "Gigabit":
+        return int(parts[-2])
+    elif parts[-1] == "Megabit":
+        return int(parts[-2]) // 1000
+    else:
+        return int(net, 10)
+
 
 def getEbsNet(rec):
     """Return EBS bandwidth in Gbps.
@@ -339,6 +356,18 @@ def getEbsNet(rec):
             xebsnet = "<" + xebsnet
         return xebsnet
     return ebsnet
+
+def getEBSBW(rec):
+    """Return EBS bandwidth in Gbps.
+    """
+    info = rec["product"]["attributes"]
+    ebsnet = info.get("dedicatedEbsThroughput")
+    if not ebsnet:
+        return 0
+    parts = ebsnet.split()
+    if parts[-1] in BWMULT:
+        return (float(parts[-2]) * BWMULT[parts[-1]])
+    return float(ebsnet)
 
 
 def getArch(rec):
@@ -538,6 +567,8 @@ def setupFilter(args):
     p.add_argument("--mem", help="memory range (min..max)")
     p.add_argument("--cpu", help="cpu range (min..max)")
     p.add_argument("--gpu", help="gpu range (min..max)")
+    p.add_argument("--ebs", help="ebs range (min..max)")
+    p.add_argument("--net", help="net range (min..max)")
     p.add_argument("--size", help="size range (min..max)")
     p.add_argument("--arch", help="arches (intel,amd,arm,all)")
     p.add_argument("--gen", help="generation (current,old,all)")
@@ -602,6 +633,8 @@ class Filter:
         self.price_min, self.price_max = parseRange(ns.price)
         self.gpu_min, self.gpu_max = parseRange(ns.gpu)
         self.size_min, self.size_max = parseRange(ns.size)
+        self.ebs_min, self.ebs_max = parseRange(ns.ebs)
+        self.net_min, self.net_max = parseRange(ns.net)
 
         self.arches = None
         self.gen = "all"
@@ -679,6 +712,8 @@ class Filter:
         if normalizationSizeFactor == "NA":
             normalizationSizeFactor = "0"
         size = float(normalizationSizeFactor)
+        net = getNetBW(rec)
+        ebs = getEBSBW(rec)
 
         if mem < self.mem_min or mem > self.mem_max:
             return False
@@ -691,6 +726,10 @@ class Filter:
         if size < self.size_min or size > self.size_max:
             return False
         if gpu < self.gpu_min or gpu > self.gpu_max:
+            return False
+        if net < self.net_min or net > self.net_max:
+            return False
+        if ebs < self.ebs_min or ebs > self.ebs_max:
             return False
 
         if self.gen:
