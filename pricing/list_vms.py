@@ -57,12 +57,16 @@ REGION_TO_DESC.update({
     "us-west-2-phx-1a": "US West (Phoenix)",
     "us-west-2-sea-1a": "US West (Seattle)",
 
+    # Bell Wavelength Zones
+    "ca-central-1-wl1-yto-wlz-1": "Canada (BELL) - Toronto",
+
     # KDDI Wavelength Zones
     "ap-northeast-1-wl1-kix-wlz-1": "Asia Pacific (KDDI) - Osaka",
     "ap-northeast-1-wl1-nrt-wlz-1": "Asia Pacific (KDDI) - Tokyo",
 
     # SK Telecom Wavelength Zones
     "ap-northeast-2-wl1-cjj-wlz-1": "Asia Pacific (SKT) - Daejeon",
+    "ap-northeast-2-wl1-sel-wlz-1": "Asia Pacific (SKT) - Seoul",
 
     # Vodafone Wavelength Zones
     "eu-central-1-wl1-ber-wlz-1": "Europe (Vodafone) - Berlin",
@@ -72,6 +76,7 @@ REGION_TO_DESC.update({
 
     # Verizon Wavelength Zones
     "us-east-1-wl1-atl-wlz-1": "US East (Verizon) - Atlanta",
+    "us-east-1-wl1-bna-wlz-1": "US East (Verizon) - Nashville",
     "us-east-1-wl1-bos-wlz-1": "US East (Verizon) - Boston",
     "us-east-1-wl1-chi-wlz-1": "US East (Verizon) - Chicago",
     "us-east-1-wl1-clt-wlz-1": "US East (Verizon) - Charlotte",
@@ -81,6 +86,7 @@ REGION_TO_DESC.update({
     "us-east-1-wl1-mia-wlz-1": "US East (Verizon) - Miami",
     "us-east-1-wl1-msp-wlz-1": "US East (Verizon) - Minneapolis",
     "us-east-1-wl1-nyc-wlz-1": "US East (Verizon) - New York",
+    "us-east-1-wl1-tpa-wlz-1": "US East (Verizon) - Tampa",
     "us-east-1-wl1-was-wlz-1": "US East (Verizon) - Washington DC",
     "us-west-2-wl1-den-wlz-1": "US West (Verizon) - Denver",
     "us-west-2-wl1-las-wlz-1": "US West (Verizon) - Las Vegas",
@@ -115,6 +121,7 @@ EPYC_V3 = "E3 Milan"
 
 AWS_GRAVITON = "G1 ARMv8"
 AWS_GRAVITON2 = "G2 ARMv82"
+AWS_GRAVITON3 = "G3 ARMv85"
 
 def xeon(n, tag):
     return XEONS[n]  # + " " + tag
@@ -149,6 +156,7 @@ CPU_CODES = {
     "AMD EPYC 7R13 Processor": EPYC_V3,
     "AWS Graviton Processor": AWS_GRAVITON,
     "AWS Graviton2 Processor": AWS_GRAVITON2,
+    "AWS Graviton3 Processor": AWS_GRAVITON3,
     "High Frequency Intel Xeon E7-8880 v3 (Haswell)": xeon(3, "E7-8880"),
     "Intel Skylake E5 2686 v5 (2.5 GHz)": xeon(5, "E5-2686"),
     "Intel Skylake E5 2686 v5": xeon(5, "E5-2686"),
