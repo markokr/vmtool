@@ -201,6 +201,27 @@ CCY_RATE = {
     "CNY": 6.96772,
 }
 
+# https://www.intel.com/content/www/us/en/developer/articles/technical/intel-vtune-amplifier-functionality-on-aws-instances.html
+# https://github.com/aws/aws-graviton-getting-started/blob/main/perfrunbook/debug_hw_perf.md
+# https://oavdeev.github.io/posts/vpmu_support_z1d/
+HW_PMU = {}
+
+def has_hw_pmu(name):
+    if name not in HW_PMU:
+        pfx, size = name.split(".", 1)
+        if "6g" in pfx:
+            HW_PMU[name] = size in ("16xlarge", "metal")
+        elif "7g" in pfx:
+            HW_PMU[name] = size in ("16xlarge", "metal")
+        elif "6i" in pfx:
+            HW_PMU[name] = size in ("16xlarge", "32xlarge", "metal")
+        elif "5a" in pfx:
+            HW_PMU[name] = False
+        elif pfx[:2] in ("m5", "c5", "r5"):
+            HW_PMU[name] = size in ("16xlarge", "24xlarge", "metal")
+        else:
+            HW_PMU[name] = False
+    return HW_PMU[name]
 
 # approx numbers for speed hints on old instances
 # https://stackoverflow.com/questions/18507405/ec2-instance-typess-exact-network-performance/35806587
@@ -474,6 +495,9 @@ def convert(rec):
             notes.append("ENA")
     notes.extend([f for f in getFeatures(rec) if f not in CPU_FEATURES_HIDE])
 
+    if has_hw_pmu(info["instanceType"]):
+        notes.append("PMU")
+
     if info["ecu"] == "NA":
         xecu = ""
     elif info["ecu"] == "Variable":
@@ -589,6 +613,7 @@ def setupFilter(args):
     g = p.add_argument_group('alternative commands')
     g.add_argument("-R", help="Show region descriptions", dest="showRegions", action="store_true")
     g.add_argument("-P", help="Show reserved prices", dest="showReserved", action="store_true")
+    g.add_argument("--show-pmu", help="Show PMU list", dest="showPMU", action="store_true")
 
     p.add_argument("vmtype", help="specific vm types (patterns)", nargs="*")
     ns = p.parse_args(args)
@@ -682,6 +707,7 @@ class Filter:
             self.vms = ns.vmtype
 
         self.showReserved = ns.showReserved
+        self.showPMU = ns.showPMU
 
         self.task = ns.task.lower() if ns.task else ""
 
@@ -816,6 +842,36 @@ def showReserved(selected):
     print(json.dumps(res, indent=2))
 
 
+def natsort_key(s, rc=re.compile(r'\d+|\D+')):
+    """Split string to numeric and non-numeric fragments."""
+    #return [not f[0].isdigit() and f or int(f, 10) for f in rc.findall(s)]
+    return [not f[0].isdigit() and f or ('%09d' % int(f, 10)) for f in rc.findall(s)]
+
+vm_sort_suffix = {
+    'nano': '0x0nano',
+    'micro': '0x1micro',
+    'small': '0x2small',
+    'medium': '0x3medium',
+    'large': '0x4large',
+    'xlarge': '1xlarge',
+}
+
+def vmtype_key(s):
+    a, b = s.split('.', 1)
+    return (natsort_key(vm_sort_suffix.get(b, b)), natsort_key(a))
+
+
+def showPMU(selected):
+    """Return key for stable order.
+    """
+    got = {}
+    for rec in selected:
+        vm_type = rec['product']['attributes']['instanceType']
+        got[vm_type] = has_hw_pmu(vm_type)
+
+    for vm_type in sorted(got, key=vmtype_key):
+        print(f"{vm_type}: {got[vm_type]}")
+
 def load_json(fn):
     gzfn = fn + ".gz"
     if os.path.isfile(gzfn):
@@ -838,6 +894,8 @@ def main():
     selected = sorted(selected, key=getSortKey)
     if flt.showReserved:
         showReserved(selected)
+    elif flt.showPMU:
+        showPMU(selected)
     else:
         converted = [convert(rec) for rec in selected]
         showTable(TABLE_FORMAT, converted)
