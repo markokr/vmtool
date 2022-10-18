@@ -35,11 +35,14 @@ REGION_TO_DESC.update({
     "ap-southeast-3": "Asia Pacific (Jakarta)",
     "eu-north-1": "EU (Stockholm)",
     "eu-south-1": "EU (Milan)",
+    "me-central-1": "Middle East (UAE)",
     "me-south-1": "Middle East (Bahrain)",
     "us-gov-east-1": "AWS GovCloud (US-East)",
     "us-gov-west-1": "AWS GovCloud (US-West)",
 
     # AWS Local Zones
+    "ap-northeast-1-tpe-1a": "Taiwan (Taipei)",
+    "ap-south-1-del-1a": "India (Delhi)",
     "us-east-1-atl-1a": "US East (Atlanta)",
     "us-east-1-bos-1": "US East (Boston)",
     "us-east-1-chi-1a": "US East (Chicago)",
