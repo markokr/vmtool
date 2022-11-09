@@ -33,6 +33,7 @@ REGION_TO_DESC.update({
     "ap-east-1": "Asia Pacific (Hong Kong)",
     "ap-northeast-3": "Asia Pacific (Osaka)",
     "ap-southeast-3": "Asia Pacific (Jakarta)",
+    "eu-central-2": "Europe (Zurich)",
     "eu-north-1": "EU (Stockholm)",
     "eu-south-1": "EU (Milan)",
     "me-central-1": "Middle East (UAE)",
@@ -43,6 +44,8 @@ REGION_TO_DESC.update({
     # AWS Local Zones
     "ap-northeast-1-tpe-1a": "Taiwan (Taipei)",
     "ap-south-1-del-1a": "India (Delhi)",
+    "eu-central-1-ham-1a": "Germany (Hamburg)",
+    "eu-central-1-waw-1a": "Poland (Warsaw)",
     "us-east-1-atl-1a": "US East (Atlanta)",
     "us-east-1-bos-1": "US East (Boston)",
     "us-east-1-chi-1a": "US East (Chicago)",
@@ -76,6 +79,7 @@ REGION_TO_DESC.update({
     "eu-central-1-wl1-dtm-wlz-1": "Europe (Vodafone) - Dortmund",
     "eu-central-1-wl1-muc-wlz-1": "Europe (Vodafone) - Munich",
     "eu-west-2-wl1-lon-wlz-1": "Europe (Vodafone) - London",
+    "eu-west-2-wl1-man-wlz-1": "Europe (Vodafone) - Manchester",
 
     # Verizon Wavelength Zones
     "us-east-1-wl1-atl-wlz-1": "US East (Verizon) - Atlanta",
@@ -183,6 +187,7 @@ CPU_CODES = {
     "Intel Xeon Platinum 8259CL": xeon(7, "P-8259CL"),
     "Intel Xeon Platinum 8275L": xeon(7, "P-8275L"),
     "Intel Xeon Platinum 8275CL (Cascade Lake)": xeon(7, "P-8275CL"),
+    "Intel Xeon Platinum 8280L (Cascade Lake)": xeon(7, "P-8280L"),
     "Intel Xeon Scalable (Skylake)": xeon(5, "P-8176M"),
     "Intel Xeon Scalable (Icelake)": xeon(8, "P-8375C?"),
     "Intel Xeon 8375C (Ice Lake)": xeon(8, "P-8375C"),
