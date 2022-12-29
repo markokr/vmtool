@@ -5,9 +5,9 @@
     Tool for managing AWS instances.
 """
 
-import sys
 import importlib
 import shlex
+import sys
 
 from vmtool.envconfig import load_env, load_env_config
 
@@ -15,9 +15,9 @@ from vmtool.envconfig import load_env, load_env_config
 def run_command(cf, args):
     """Command is implemented by class specified in vmtool_profile.
     """
-    mod_name = cf.get('vmtool_profile')
+    mod_name = cf.get("vmtool_profile")
     mod = importlib.import_module(mod_name)
-    script = mod.VmTool('vmtool', args)
+    script = mod.VmTool("vmtool", args)
     script.start()
     sys.stdout.flush()
     sys.stderr.flush()
@@ -40,12 +40,12 @@ def run_alias(env_name, alias, cmd, cmdpos, args, options, is_cmd):
 
     """
     cmd_prefix = args[:cmdpos]
-    cmd_self = args[cmdpos:cmdpos+1]
-    cmd_suffix = args[cmdpos+1:]
-    for elem in alias.split(','):
+    cmd_self = args[cmdpos:cmdpos + 1]
+    cmd_suffix = args[cmdpos + 1:]
+    for elem in alias.split(","):
         elem = elem.strip()
-        if ':' in elem:
-            role, acmd = elem.split(':', 1)
+        if ":" in elem:
+            role, acmd = elem.split(":", 1)
             role, acmd = role.strip(), acmd.strip()
             xcmd = shlex.split(acmd)
         elif is_cmd:
@@ -57,11 +57,11 @@ def run_alias(env_name, alias, cmd, cmdpos, args, options, is_cmd):
 
         xargs = cmd_prefix + xcmd + cmd_suffix
         if role:
-            xargs = ['--role=' + role] + xargs
+            xargs = ["--role=" + role] + xargs
 
-        extra = ''
+        extra = ""
         if options:
-            extra = ' [%s]' % ' '.join(options)
+            extra = " [%s]" % " ".join(options)
             xargs = options + xargs
         env_name = load_env(xargs)
 
@@ -80,11 +80,11 @@ def main():
     cmdpos = None
     for i, a in enumerate(args):
         if cmd is None:
-            if a[0] != '-':
+            if a[0] != "-":
                 cmd = a
                 cmdpos = i
-        elif a[0] == '-':
-            args.insert(cmdpos + 1, '--')
+        elif a[0] == "-":
+            args.insert(cmdpos + 1, "--")
             break
 
     # load config
@@ -92,23 +92,23 @@ def main():
     cf = load_env_config(env_name)
 
     # does role need replacing
-    alias_sect = 'alias.%s' % cmd
+    alias_sect = "alias.%s" % cmd
     if cmd and cf.has_section(alias_sect):
-        if cf.cf.has_option(alias_sect, 'roles'):
-            alias = cf.cf.get(alias_sect, 'roles')
+        if cf.cf.has_option(alias_sect, "roles"):
+            alias = cf.cf.get(alias_sect, "roles")
             is_cmd = False
         else:
-            alias = cf.cf.get(alias_sect, 'commands')
+            alias = cf.cf.get(alias_sect, "commands")
             is_cmd = True
         options = []
-        if cf.cf.has_option(alias_sect, 'options'):
-            options = shlex.split(cf.cf.get(alias_sect, 'options'))
+        if cf.cf.has_option(alias_sect, "options"):
+            options = shlex.split(cf.cf.get(alias_sect, "options"))
         run_alias(env_name, alias, cmd, cmdpos, args, options, is_cmd)
     else:
         run_command(cf, args)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:

@@ -1,2 +1,3 @@
 *.json
-cache
+cache*
+diffs

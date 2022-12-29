@@ -22,20 +22,21 @@ Extended syntax (extglob):
 
 """
 
-import sys
+import functools
 import os
 import os.path
 import re
-import functools
+import sys
+from typing import Callable, Iterable, Iterator, Match, Optional
 
-__all__ = ['xglob', 'xfilter']
+__all__ = ["xglob", "xfilter"]
 
 
 # special regex symbols
-_RXMAGIC = re.compile(r'[][(){}\\.?*+|^$]')
+_RXMAGIC = re.compile(r"[][(){}\\.?*+|^$]")
 
 # glob magic
-_GMAGIC = re.compile(r'[][()*?]')
+_GMAGIC = re.compile(r"[][()*?]")
 
 # glob tokens
 _GTOK = re.compile(r"""
@@ -46,40 +47,40 @@ _GTOK = re.compile(r"""
 
 # map glob syntax to regex syntax
 _PARENS = {
-    '?(': ['(?:', ')?'],
-    '*(': ['(?:', ')*'],
-    '+(': ['(?:', ')+'],
-    '@(': ['(?:', ')'],
-    '!(': ['(?!', ')'],
+    "?(": ("(?:", ")?"),
+    "*(": ("(?:", ")*"),
+    "+(": ("(?:", ")+"),
+    "@(": ("(?:", ")"),
+    "!(": ("(?!", ")"),
 }
 
 
-def escape(s):
+def escape(s: str) -> str:
     """Escape glob meta-characters.
     """
-    return _GMAGIC.sub(r'[\g<0>]', s)
+    return _GMAGIC.sub(r"[\g<0>]", s)
 
 
-def re_escape(s):
+def re_escape(s: str) -> str:
     """Escape regex meta-characters.
     """
-    return _RXMAGIC.sub(r'\\\g<0>', s)
+    return _RXMAGIC.sub(r"\\\g<0>", s)
 
 
-def has_magic(pat):
+def has_magic(pat: str) -> bool:
     """Contains glob magic chars.
     """
     return _GMAGIC.search(pat) is not None
 
 
-def _nomatch(name):
+def _nomatch(name: str) -> Optional[Match[str]]:
     """Invalid pattern does not match anything.
     """
     return None
 
 
 @functools.lru_cache(maxsize=256, typed=True)
-def _compile(pat):
+def _compile(pat: str) -> Callable[[str], Optional[Match[str]]]:
     """Convert glob/fnmatch pattern to compiled regex.
     """
     plen = len(pat)
@@ -98,25 +99,25 @@ def _compile(pat):
 
         c = m.group(0)
         if len(c) > 1:
-            if c[0] == '[':
-                if c[1] == '!':
-                    x = '[^' + re_escape(c[2:-1]) + ']'
+            if c[0] == "[":
+                if c[1] == "!":
+                    x = "[^" + re_escape(c[2:-1]) + "]"
                 else:
-                    x = '[' + re_escape(c[1:-1]) + ']'
+                    x = "[" + re_escape(c[1:-1]) + "]"
             elif c in _PARENS:
                 x = _PARENS[c][0]
                 parens.append(_PARENS[c][1])
             else:
                 x = re_escape(c)
-        elif c == '?':
-            x = '.'
-        elif c == '*':
-            x = '.*'
+        elif c == "?":
+            x = "."
+        elif c == "*":
+            x = ".*"
             if res and res[-1] == x:
                 continue
-        elif c == ')' and parens:
+        elif c == ")" and parens:
             x = parens.pop()
-        elif c == '|' and parens:
+        elif c == "|" and parens:
             x = c
         else:
             x = re_escape(c)
@@ -125,17 +126,17 @@ def _compile(pat):
     if parens:
         return _nomatch
 
-    xre = r'\A' + ''.join(res) + r'\Z'
+    xre = r"\A" + "".join(res) + r"\Z"
     return re.compile(xre, re.S).match
 
 
-def xfilter(pat, names):
+def xfilter(pat: str, names: Iterable[str]) -> Iterator[str]:
     """Filter name list based on glob pattern.
     """
     matcher = _compile(pat)
-    if pat[0] != '.':
+    if pat[0] != ".":
         for n in names:
-            if n[0] != '.' and matcher(n):
+            if n[0] != "." and matcher(n):
                 yield n
     else:
         for n in names:
@@ -143,17 +144,17 @@ def xfilter(pat, names):
                 yield n
 
 
-def dirglob_nopat(dirname, basename, dirs_only):
+def _dirglob_nopat(dirname: str, pattern: str, dirs_only: bool) -> Iterator[str]:
     """File name without pattern.
     """
-    if basename == '':
-        if os.path.isdir(dirname):
-            yield basename
-    elif os.path.lexists(os.path.join(dirname, basename)):
-        yield basename
+    if pattern == "":
+        if os.path.isdir(pattern):
+            yield pattern
+    elif os.path.lexists(os.path.join(dirname, pattern)):
+        yield pattern
 
 
-def dirglob_pat(dirname, pattern, dirs_only):
+def _dirglob_pat(dirname: str, pattern: str, dirs_only: bool) -> Iterator[str]:
     """File name with pattern.
     """
     if not isinstance(pattern, bytes) and isinstance(dirname, bytes):
@@ -165,30 +166,30 @@ def dirglob_pat(dirname, pattern, dirs_only):
     return xfilter(pattern, names)
 
 
-def dirglob_subtree(dirname, pattern, dirs_only):
-    """File name is '**', recurse into subtrees.
+def _dirglob_subtree(dirname: str, pattern: str, dirs_only: bool) -> Iterator[str]:
+    """File name is "**", recurse into subtrees.
     """
     for dp, dnames, fnames in os.walk(dirname, topdown=True):
         if dp == dirname:
-            basedir = ''
+            basedir = ""
             yield basedir
         else:
             basedir = dp[len(dirname) + 1:] + os.path.sep
 
         if not dirs_only:
             for fn in fnames:
-                if fn[0] != '.':
+                if fn[0] != ".":
                     yield basedir + fn
 
         filtered = []
         for dn in dnames:
-            if dn[0] != '.':
+            if dn[0] != ".":
                 filtered.append(dn)
                 yield basedir + dn
-        dnames[:] = filtered
+        dnames[:] = filtered    # os.walk(topdown) next scan
 
 
-def _xglob(pat, dirs_only=False):
+def _xglob(pat: str, dirs_only: bool = False) -> Iterator[str]:
     """Internal implementation.
     """
 
@@ -202,7 +203,7 @@ def _xglob(pat, dirs_only=False):
     dn, bn = os.path.split(pat)
     if not dn:
         # pattern without dir part
-        for name in dirglob_pat(os.curdir, bn, dirs_only):
+        for name in _dirglob_pat(os.curdir, bn, dirs_only):
             yield name
         return
 
@@ -213,20 +214,20 @@ def _xglob(pat, dirs_only=False):
         dirs = iter([dn])
 
     # decide how to expand file part
-    if bn == '**':
-        dirglob = dirglob_subtree
+    if bn == "**":
+        dirglob = _dirglob_subtree
     elif has_magic(bn):
-        dirglob = dirglob_pat
+        dirglob = _dirglob_pat
     else:
-        dirglob = dirglob_nopat
+        dirglob = _dirglob_nopat
 
     # loop over files
     for dn in dirs:
         for name in dirglob(dn, bn, dirs_only):
-            yield os.path.join(dn, name).replace(os.path.sep, '/')
+            yield os.path.join(dn, name).replace(os.path.sep, "/")
 
 
-def xglob(pat):
+def xglob(pat: str) -> Iterator[str]:
     """Extended glob.
 
     Supports ** and extended glob syntax in pattern.
@@ -236,12 +237,12 @@ def xglob(pat):
     return _xglob(pat)
 
 
-def main():
+def main() -> None:
     for pat in sys.argv[1:]:
         for fn in xglob(pat):
             print(fn)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
 
