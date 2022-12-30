@@ -5,11 +5,12 @@
 
 import argparse
 import fnmatch
+import gzip
 import json
 import os.path
 import re
 import sys
-import gzip
+import tabulate
 
 import botocore.session
 
@@ -28,24 +29,17 @@ REGION_TO_DESC = {
     for part in AWS_ENDPOINTS["partitions"]
         for r, rv in part["regions"].items()
 }
-REGION_TO_DESC.update({
-    "af-south-1": "Africa (Cape Town)",
-    "ap-east-1": "Asia Pacific (Hong Kong)",
-    "ap-northeast-3": "Asia Pacific (Osaka)",
+REGION_TO_DESC_NEW = {
     "ap-south-2": "Asia Pacific (Hyderabad)",
-    "ap-southeast-3": "Asia Pacific (Jakarta)",
     "eu-central-2": "Europe (Zurich)",
-    "eu-north-1": "EU (Stockholm)",
-    "eu-south-1": "EU (Milan)",
     "eu-south-2": "Europe (Spain)",
     "me-central-1": "Middle East (UAE)",
-    "me-south-1": "Middle East (Bahrain)",
-    "us-gov-east-1": "AWS GovCloud (US-East)",
-    "us-gov-west-1": "AWS GovCloud (US-West)",
 
     # AWS Local Zones
     "ap-northeast-1-tpe-1a": "Taiwan (Taipei)",
+    "ap-south-1-ccu-1a": "India (Kolkata)",
     "ap-south-1-del-1a": "India (Delhi)",
+    "ap-southeast-1-bkk-1a": "Thailand (Bangkok)",
     "eu-central-1-ham-1a": "Germany (Hamburg)",
     "eu-central-1-waw-1a": "Poland (Warsaw)",
     "eu-north-1-cph-1a": "Denmark (Copenhagen)",
@@ -107,7 +101,11 @@ REGION_TO_DESC.update({
     "us-west-2-wl1-phx-wlz-1": "US West (Verizon) - Phoenix",
     "us-west-2-wl1-sea-wlz-1": "US West (Verizon) - Seattle",
     "us-west-2-wl1-sfo-wlz-1": "US West (Verizon) - San Francisco Bay Area",
-})
+}
+#DROP = [k for k in REGION_TO_DESC_NEW if k in REGION_TO_DESC]
+#assert not DROP, DROP
+
+REGION_TO_DESC.update(REGION_TO_DESC_NEW)
 DESC_TO_REGION = {v: k for k, v in REGION_TO_DESC.items()}
 
 # CPU feature words
@@ -392,6 +390,7 @@ def getEbsNet(rec):
         return xebsnet
     return ebsnet
 
+
 def getEBSBW(rec):
     """Return EBS bandwidth in Gbps.
     """
@@ -512,15 +511,6 @@ def convert(rec):
     if has_hw_pmu(info["instanceType"]):
         notes.append("PMU")
 
-    if info["ecu"] == "NA":
-        xecu = ""
-    elif info["ecu"] == "Variable":
-        xecu = "~"
-    elif "." in info["ecu"]:
-        xecu = int(float(info["ecu"]))
-    else:
-        xecu = info["ecu"]
-
     xtask = info["instanceFamily"].split()[0]
     if info.get("gpu"):
         xtask += "-" + info["gpu"]
@@ -532,39 +522,44 @@ def convert(rec):
         nsf = "%.1f" % float(nsf)
 
     return {
-        "instanceType": info["instanceType"],
+        "instance": f"{info['instanceType']} ({nsf})",
+        "region": getRegion(rec),
+        "price": f"{price:.02f}",
+        "vcpu": info["vcpu"],
+
+        "clock": xspeed,
         "mem": mem,
         "net": getNet(rec),
-        "price": price,
-        "vcpu": info["vcpu"],
-        "local": xlocal,
-        "clock": xspeed,
-        "note": ", ".join(notes),
-        "cpu": CPU_CODES.get(info["physicalProcessor"], "NEW: " + info["physicalProcessor"]),
-        "task": xtask,
         "ebsnet": xebsnet,
-        "ecu": xecu,
-        "gpu": info.get("gpu", ""),
-        "region": getRegion(rec),
-        "normalizationSizeFactor": nsf,
+
+        "local": xlocal,
+        "task": xtask,
+        "cpu": CPU_CODES.get(info["physicalProcessor"], "NEW: " + info["physicalProcessor"]),
+        "note": ", ".join(notes),
     }
 
+TABLE_HEADER = {
+    "instance": "Instance",
+    "region": "Region",
+    "price": "Price/m",
+    "vcpu": "vCPU",
 
-TABLE_FORMAT = {
-    "Instance": "{instanceType:<} ({normalizationSizeFactor})",
-    "Region": "{region:<}",
-    "Price/m": "{price:.02f}",
-    "vCPU": "{vcpu}",
-    #"ECU": "{ecu}",
-    "Clock": "{clock}",
-    "Mem": "{mem}",
-    "NetBW": "{net}",
-    "EBSBW": "{ebsnet}",
-    "Local": "{local}",
-    "Task": "{task:<}",
-    "Hardware": "{cpu:<}",
-    "Note": "{note:<}",
+    "clock": "Clock",
+    "mem": "Mem",
+    "net": "NetBW",
+    "ebsnet": "EBSBW",
+
+    "local": "Local",
+    "task": "Task",
+    "cpu": "Hardware",
+    "note": "Note",
 }
+
+TABLE_COLALIGN = [
+    "left", "left", "right", "right",
+    "right", "right", "right", "right",
+    "left", "left", "left", "left",
+]
 
 
 def parseRange(v):
@@ -629,12 +624,15 @@ def setupFilter(args):
     g.add_argument("-P", help="Show reserved prices", dest="showReserved", action="store_true")
     g.add_argument("--show-pmu", help="Show PMU list", dest="showPMU", action="store_true")
 
+    g = p.add_argument_group('output options')
+    g.add_argument("--format", help="Output format (default: presto)", default="presto")
+
     p.add_argument("vmtype", help="specific vm types (patterns)", nargs="*")
     ns = p.parse_args(args)
 
     if ns.showRegions:
-        for reg in sorted(REGION_TO_DESC):
-            print("%-10s %s" % (reg, REGION_TO_DESC[reg]))
+        tbl = [[reg, REGION_TO_DESC[reg]] for reg in sorted(REGION_TO_DESC)]
+        print(tabulate.tabulate(tbl, (), "plain"))
         sys.exit(0)
 
     if ns.reserved:
@@ -652,6 +650,8 @@ class Filter:
     """Filter object.
     """
     def __init__(self, ns):
+        self.format = ns.format
+
         if ns.region:
             self.region = ns.region.split(",")
         else:
@@ -803,49 +803,12 @@ class Filter:
         return True
 
 
-def showTable(meta, data_list):
-    """Generic table printer.
-    """
-    widths = {}
-    lines = []
-
-    for hdr, fmts in meta.items():
-        widths[hdr] = len(hdr)
-
-    for rec in data_list:
-        line = []
-        for hdr, fmt in meta.items():
-            v = fmt.format(**rec)
-            if len(v) > widths[hdr]:
-                widths[hdr] = len(v)
-            line.append(v)
-        lines.append(tuple(line))
-
-    hdrs = []
-    fmts = []
-    for hdr, fmt in meta.items():
-        mx = widths[hdr]
-        hdrs.append(hdr.ljust(mx))
-        if "<" in fmt:
-            fmts.append("%%-%ds" % mx)
-        else:
-            fmts.append("%%%ds" % mx)
-
-    line_fmt = " %s " % " | ".join(fmts)
-    hdr_line = " %s " % " | ".join(hdrs)
-    sep_line = re.sub("[^+]", "-", hdr_line.replace("|", "+"))
-
-    print(hdr_line.rstrip())
-    print(sep_line.rstrip())
-    for line in lines:
-        print((line_fmt % line).rstrip())
-
-
 def getSortKey(rec):
     """Return key for stable order.
     """
     info = rec["product"]["attributes"]
     return (getPrice(rec), info["instanceType"], info["location"])
+
 
 def showReserved(selected):
     res = {}
@@ -860,6 +823,7 @@ def natsort_key(s, rc=re.compile(r'\d+|\D+')):
     """Split string to numeric and non-numeric fragments."""
     #return [not f[0].isdigit() and f or int(f, 10) for f in rc.findall(s)]
     return [not f[0].isdigit() and f or ('%09d' % int(f, 10)) for f in rc.findall(s)]
+
 
 vm_sort_suffix = {
     'nano': '0x0nano',
@@ -886,6 +850,7 @@ def showPMU(selected):
     for vm_type in sorted(got, key=vmtype_key):
         print(f"{vm_type}: {got[vm_type]}")
 
+
 def load_json(fn):
     gzfn = fn + ".gz"
     if os.path.isfile(gzfn):
@@ -911,8 +876,18 @@ def main():
     elif flt.showPMU:
         showPMU(selected)
     else:
-        converted = [convert(rec) for rec in selected]
-        showTable(TABLE_FORMAT, converted)
+        rows = [TABLE_HEADER]
+        rows.extend(convert(rec) for rec in selected)
+        args = {
+            "tablefmt": flt.format,
+            "disable_numparse": True,
+            "colalign": TABLE_COLALIGN,
+        }
+        # work around tabulate crash with firstrow+0rows
+        if len(rows) > 1:
+            args["headers"] = "firstrow"
+        txt = tabulate.tabulate(rows, **args)
+        print(txt)
 
 
 if __name__ == "__main__":
