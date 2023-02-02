@@ -31,15 +31,18 @@ REGION_TO_DESC = {
 }
 REGION_TO_DESC_NEW = {
     "ap-south-2": "Asia Pacific (Hyderabad)",
+    "ap-southeast-4": "Asia Pacific (Melbourne)",
     "eu-central-2": "Europe (Zurich)",
     "eu-south-2": "Europe (Spain)",
     "me-central-1": "Middle East (UAE)",
 
     # AWS Local Zones
+    "af-south-1-los-1a": "Nigeria (Lagos)",
     "ap-northeast-1-tpe-1a": "Taiwan (Taipei)",
     "ap-south-1-ccu-1a": "India (Kolkata)",
     "ap-south-1-del-1a": "India (Delhi)",
     "ap-southeast-1-bkk-1a": "Thailand (Bangkok)",
+    "ap-southeast-2-per-1a": "Australia (Perth)",
     "eu-central-1-ham-1a": "Germany (Hamburg)",
     "eu-central-1-waw-1a": "Poland (Warsaw)",
     "eu-north-1-cph-1a": "Denmark (Copenhagen)",
@@ -51,11 +54,14 @@ REGION_TO_DESC_NEW = {
     "us-east-1-chi-1a": "US East (Chicago)",
     "us-east-1-dfw-1a": "US East (Dallas)",
     "us-east-1-iah-1": "US East (Houston)",
+    "us-east-1-lim-1a": "Peru (Lima)",
     "us-east-1-mci-1a": "US East (Kansas City 2)",
     "us-east-1-mia-1": "US East (Miami)",
     "us-east-1-msp-1a": "US East (Minneapolis)",
     "us-east-1-nyc-1a": "US East (New York City)",
     "us-east-1-phl-1a": "US East (Philadelphia)",
+    "us-east-1-qro-1a": "Mexico (Queretaro)",
+    "us-east-1-scl-1a": "Chile (Santiago)",
     "us-west-2-den-1a": "US West (Denver)",
     "us-west-2-las-1a": "US West (Las Vegas)",
     "us-west-2-lax-1a": "US West (Los Angeles)",
