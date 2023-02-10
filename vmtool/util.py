@@ -1,7 +1,8 @@
 """Utility functions for vmtool.
 """
 
-import sys
+import binascii
+import datetime
 import errno
 import gzip
 import hashlib
@@ -12,24 +13,22 @@ import logging
 import os
 import re
 import subprocess
+import sys
 import time
-import binascii
-import datetime
 
-
-__all__ = ['hash_known_host', 'ssh_add_known_host', 'parse_console', 'fmt_dur',
-           'gz_compress', 'rsh_quote', 'printf', 'eprintf']
+__all__ = ["hash_known_host", "ssh_add_known_host", "parse_console", "fmt_dur",
+           "gz_compress", "rsh_quote", "printf", "eprintf"]
 
 
 def as_unicode(s):
     if not isinstance(s, bytes):
         return s
-    return s.decode('utf8')
+    return s.decode("utf8")
 
 
 def as_bytes(s):
     if not isinstance(s, bytes):
-        return s.encode('utf8')
+        return s.encode("utf8")
     return s
 
 
@@ -45,13 +44,19 @@ def hash_known_host(host, old_entry=None):
     """Hash hostname or ip for SSH known_hosts file.
     """
     if old_entry:
-        salt = binascii.a2b_base64(old_entry[3:].split('|', 1)[0])
+        salt = binascii.a2b_base64(old_entry[3:].split("|", 1)[0])
     else:
         salt = os.urandom(20)
     h = hmac.new(salt, as_bytes(host), hashlib.sha1).digest()
     s64 = as_unicode(encode_base64(salt))
     h64 = as_unicode(encode_base64(h))
-    return '|1|%s|%s' % (s64, h64)
+    return "|1|%s|%s" % (s64, h64)
+
+
+def load_lines(fn):
+    with open(fn, encoding="utf8") as f:
+        for ln in f.readlines():
+            yield ln
 
 
 def ssh_add_known_host(kh_file, dns, ip, ktype, kval, vm_id, hash_hosts=True):
@@ -59,7 +64,7 @@ def ssh_add_known_host(kh_file, dns, ip, ktype, kval, vm_id, hash_hosts=True):
     if not os.path.isdir(fdir):
         os.makedirs(fdir, 0o700, exist_ok=True)
 
-    space_rc = re.compile('[ \t]+')
+    space_rc = re.compile("[ \t]+")
     new_file = []
     if os.path.isfile(kh_file):
         found_ip = False
@@ -67,10 +72,10 @@ def ssh_add_known_host(kh_file, dns, ip, ktype, kval, vm_id, hash_hosts=True):
         drops = False
         cur_key = (ktype, kval)
         lines = 0
-        for ln in open(kh_file).readlines():
+        for ln in load_lines(kh_file):
             lines += 1
             xln = ln.strip()
-            if not xln or xln[0] == '#':
+            if not xln or xln[0] == "#":
                 new_file.append(ln)
                 continue
             t = space_rc.split(xln)
@@ -78,9 +83,9 @@ def ssh_add_known_host(kh_file, dns, ip, ktype, kval, vm_id, hash_hosts=True):
             kt = t[1].strip()
             kv = t[2].strip()
             old_key = (kt, kv)
-            if kt != ktype and ktype != 'ecdsa-sha2-nistp256':
+            if kt != ktype and ktype != "ecdsa-sha2-nistp256":
                 pass
-            elif adr.startswith('|1|'):
+            elif adr.startswith("|1|"):
                 if ip and adr == hash_known_host(ip, adr):
                     if old_key == cur_key:
                         found_ip = True
@@ -130,7 +135,7 @@ def ssh_add_known_host(kh_file, dns, ip, ktype, kval, vm_id, hash_hosts=True):
             ipln = "%s %s %s %s\n" % (ip, ktype, kval, vm_id)
         new_file.append(ipln)
 
-    write_atomic(kh_file, ''.join(new_file))
+    write_atomic(kh_file, "".join(new_file))
 
 
 #
@@ -138,7 +143,7 @@ def ssh_add_known_host(kh_file, dns, ip, ktype, kval, vm_id, hash_hosts=True):
 #
 
 
-def parse_console(vm_console, key_types=('ssh-ed25519', 'ecdsa-sha2-nistp256')):
+def parse_console(vm_console, key_types=("ssh-ed25519", "ecdsa-sha2-nistp256")):
     """Parse SSH keys from AWS vm console.
     """
     begin = "-----BEGIN SSH HOST KEY KEYS-----"
@@ -158,14 +163,14 @@ def parse_console(vm_console, key_types=('ssh-ed25519', 'ecdsa-sha2-nistp256')):
 
     # parse lines
     klines = vm_console[p1 + len(begin):p2]
-    for kln in klines.split('\n'):
-        pos = kln.find('ecdsa-')
+    for kln in klines.split("\n"):
+        pos = kln.find("ecdsa-")
         if pos < 0:
-            pos = kln.find('ssh-')
+            pos = kln.find("ssh-")
             if pos < 0:
                 continue
         kln = kln[pos:].strip()
-        ktype, kcert, kname = kln.split(' ')
+        ktype, kcert, kname = kln.split(" ")
         if ktype not in key_types:
             continue
         keys.append((ktype, kcert))
@@ -191,9 +196,9 @@ def gz_compress(filename, data):
 
 def rsh_quote(args):
     if not isinstance(args, (tuple, list)):
-        raise ValueError('rsh_quote needs list of args')
+        raise ValueError("rsh_quote needs list of args")
     res = []
-    rc_bad = re.compile(r'[^\-\w.,:_=/]')
+    rc_bad = re.compile(r"[^\-\w.,:_=/]")
     for a in args:
         if rc_bad.search(a):
             a = "'%s'" % a.replace("'", "'\\''")
@@ -211,14 +216,14 @@ def hmac_sha256(key, data):
 def printf(msg, *args):
     if args:
         msg = msg % args
-    sys.stdout.write(msg + '\n')
+    sys.stdout.write(msg + "\n")
     sys.stdout.flush()
 
 
 def eprintf(msg, *args):
     if args:
         msg = msg % args
-    sys.stderr.write(msg + '\n')
+    sys.stderr.write(msg + "\n")
     sys.stderr.flush()
 
 
@@ -227,7 +232,7 @@ def time_printf(msg, *args):
     tstr = "%02d:%02d:%02d *** " % (t.tm_hour, t.tm_min, t.tm_sec)
     if args:
         msg = msg % args
-    sys.stdout.write(tstr + msg + '\n')
+    sys.stdout.write(tstr + msg + "\n")
     sys.stdout.flush()
 
 
@@ -240,7 +245,7 @@ def run_successfully(cmd, **kwargs):
 
 
 def local_cmd(cmd):
-    return subprocess.check_output(cmd).decode('utf8')
+    return subprocess.check_output(cmd).decode("utf8")
 
 
 def _json_default(obj):
@@ -253,22 +258,24 @@ def print_json(obj):
     print(json.dumps(obj, indent=4, default=_json_default, sort_keys=True))
 
 
-# non-win32
-def write_atomic(fn, data, bakext=None, mode='b'):
+def write_atomic(fn, data, bakext=None, mode="b"):
     """Write file with rename."""
 
-    if mode not in ['', 'b', 't']:
+    if mode not in ("", "b", "t"):
         raise ValueError("unsupported fopen mode")
 
     # write new data to tmp file
-    fn2 = fn + '.new'
-    f = open(fn2, 'w' + mode)
-    f.write(as_bytes(data))
-    f.close()
+    fn2 = fn + ".new"
+    if mode == "b":
+        with open(fn2, "wb") as f:
+            f.write(as_bytes(data))
+    else:
+        with open(fn2, "w", encoding="utf8") as f:
+            f.write(data)
 
     # link old data to backup file
     if bakext:
-        if bakext.find('/') >= 0:
+        if bakext.find("/") >= 0:
             raise ValueError("invalid bakext")
         fnb = fn + bakext
         try:
@@ -283,10 +290,10 @@ def write_atomic(fn, data, bakext=None, mode='b'):
                 raise
 
     # win32 does not like replace
-    if sys.platform == 'win32':
+    if sys.platform == "win32":
         try:
             os.remove(fn)
-        except:
+        except BaseException:
             pass
 
     # atomically replace file
@@ -297,21 +304,20 @@ def fmt_dur(dur):
     """Format time duration.
 
     >>> dlong = ((27 * 24 + 2) * 60 + 38) * 60 + 43
-    >>> [fmt_dur(v) for v in (0.001, 1.1, dlong, -5)] == ['0s', '1s', '27d2h38m43s', '-5s']
+    >>> [fmt_dur(v) for v in (0.001, 1.1, dlong, -5)] == ["0s", "1s", "27d2h38m43s", "-5s"]
     True
     """
     res = []
     if dur < 0:
-        res.append('-')
+        res.append("-")
         dur = -dur
     tmp, secs = divmod(int(dur), 60)
     tmp, mins = divmod(tmp, 60)
     days, hours = divmod(tmp, 24)
-    for (val, unit) in ((days, 'd'), (hours, 'h'), (mins, 'm'), (secs, 's')):
+    for (val, unit) in ((days, "d"), (hours, "h"), (mins, "m"), (secs, "s")):
         if val:
-            res.append('%d%s' % (val, unit))
+            res.append("%d%s" % (val, unit))
     if not res:
-        return '0s'
-    return ''.join(res)
-
+        return "0s"
+    return "".join(res)
 

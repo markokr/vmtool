@@ -2,16 +2,16 @@
 """Useful functions and classes for Python command-line tools.
 """
 
-import sys
+import argparse
 import inspect
 import logging
 import logging.config
 import logging.handlers
-import argparse
+import sys
 
 from vmtool.config import Config
 
-__all__ = ['EnvScript', 'UsageError']
+__all__ = ["EnvScript", "UsageError"]
 
 
 class UsageError(Exception):
@@ -36,7 +36,7 @@ class EnvScript(object):
     cf_defaults = {}
 
     # setup logger here, this allows override by subclass
-    log = logging.getLogger('EnvScript')
+    log = logging.getLogger("EnvScript")
 
     def __init__(self, service_name, args):
         """Script setup.
@@ -79,7 +79,7 @@ class EnvScript(object):
         self.cf_override = {}
         if self.options.set:
             for a in self.options.set:
-                k, v = a.split('=', 1)
+                k, v = a.split("=", 1)
                 self.cf_override[k.strip()] = v.strip()
 
         # read config file
@@ -118,7 +118,7 @@ class EnvScript(object):
     def reload(self):
         """Reload config.
         """
-        self.log.debug('reload')
+        self.log.debug("reload")
         # avoid double loading on startup
         if not self.cf:
             self.cf = self.load_config()
@@ -142,17 +142,17 @@ class EnvScript(object):
             return func()
         except UsageError as d:
             self.log.error(str(d))
-        except MemoryError as d:
+        except MemoryError:
             try:    # complex logging may not succeed
                 self.log.exception("Job %s out of memory, exiting", self.job_name)
             except MemoryError:
                 self.log.fatal("Out of memory")
         except SystemExit as d:
             raise d
-        except KeyboardInterrupt as d:
+        except KeyboardInterrupt:
             sys.exit(1)
-        except Exception as d:
-            self.log.exception('Command failed')
+        except Exception:
+            self.log.exception("Command failed")
         # done
         sys.exit(1)
 
@@ -169,12 +169,13 @@ class EnvScript(object):
         cmdargs = self.options.args
 
         # find function
-        fname = "cmd_" + cmd.replace('-', '_')
+        fname = "cmd_" + cmd.replace("-", "_")
         if not hasattr(self, fname):
-            self.log.error('bad subcommand, see --help for usage')
+            self.log.error("bad subcommand, see --help for usage")
             sys.exit(1)
         fn = getattr(self, fname)
 
         b = inspect.signature(fn).bind(*cmdargs)
 
         fn(*b.args, **b.kwargs)
+

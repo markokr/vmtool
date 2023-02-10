@@ -1,14 +1,14 @@
 """Tarball creation with data filter.
 """
 
-import sys
 import io
 import os
+import stat
+import sys
 import tarfile
 import time
-import stat
 
-__all__ = ['TarBall']
+__all__ = ["TarBall"]
 
 # mode for normal files
 TAR_FILE_MODE = stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IROTH
@@ -22,8 +22,9 @@ TAR_EXEC_MODE = TAR_DIR_MODE
 
 class TarBall(object):
     def __init__(self):
+        # pylint:disable=consider-using-with
         self.buf = io.BytesIO()
-        self.tf = tarfile.open('buf.tgz', 'w|gz', self.buf, format=tarfile.PAX_FORMAT)
+        self.tf = tarfile.open("buf.tgz", "w|gz", self.buf, format=tarfile.PAX_FORMAT)
 
     def filter_data(self, fname, data):
         """Overridable function."""
@@ -44,7 +45,7 @@ class TarBall(object):
         if st.st_mode & stat.S_IXUSR > 0:
             mode = TAR_EXEC_MODE
 
-        with open(fpath, 'rb') as f:
+        with open(fpath, "rb") as f:
             data = f.read()
 
         self.add_file_data(fpath, data, mode)
@@ -52,7 +53,7 @@ class TarBall(object):
     def add_file_data(self, fpath, data, mode=TAR_FILE_MODE, mtime=None):
         """Add data as filename."""
         origdata = data
-        fpath = fpath.replace('\\', '/')
+        fpath = fpath.replace("\\", "/")
         fpath, data = self.filter_data(fpath, data)
         if not fpath:
             return
@@ -62,17 +63,17 @@ class TarBall(object):
         inf.mtime = mtime or time.time()
         inf.uid = 1000
         inf.gid = 1000
-        inf.uname = 'nobody'
-        inf.gname = 'nobody'
+        inf.uname = "nobody"
+        inf.gname = "nobody"
         inf.mode = mode
 
-        base = fpath.split('/')[-1]
+        base = fpath.split("/")[-1]
         ext = None
-        if '.' in base:
-            ext = base.split('.')[-1]
-        if ext == 'sh':
+        if "." in base:
+            ext = base.split(".")[-1]
+        if ext == "sh":
             inf.mode = TAR_EXEC_MODE
-        elif base in ('fl_start_services', 'job_setup', 'user_setup'):
+        elif base in ("fl_start_services", "job_setup", "user_setup"):
             inf.mode = TAR_EXEC_MODE
 
         inf.size = len(data)
@@ -81,17 +82,17 @@ class TarBall(object):
 
     def add_dir(self, dpath, mode=TAR_DIR_MODE, mtime=None):
         """Add directory entry."""
-        dpath = dpath.replace('\\', '/')
+        dpath = dpath.replace("\\", "/")
         dpath, data = self.filter_data(dpath, None)
         if not dpath:
             return
 
-        inf = tarfile.TarInfo(dpath + '/')
+        inf = tarfile.TarInfo(dpath + "/")
         inf.mtime = mtime or time.time()
         inf.uid = 1000
         inf.gid = 1000
-        inf.uname = 'nobody'
-        inf.gname = 'nobody'
+        inf.uname = "nobody"
+        inf.gname = "nobody"
         inf.mode = mode
         inf.type = tarfile.DIRTYPE
         self.tf.addfile(inf)
@@ -112,10 +113,12 @@ def main():
     for fn in sys.argv[1:]:
         tb.add_path(fn)
     tb.close()
-    sys.stdout.write(tb.getvalue())
-    sys.stdout.flush()
+
+    with os.fdopen(sys.stdout.fileno(), "wb", closefd=False) as out:
+        out.write(tb.getvalue())
+        out.flush()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
 

@@ -60,28 +60,34 @@ confidence=
 # --enable=similarities". If you want to run only the classes checker, but have
 # no Warning level messages displayed, use "--disable=all --enable=classes
 # --disable=W".
-disable=bad-continuation,
-	bad-whitespace,
-	bare-except,
-	broad-except,
-	consider-using-in,
-	consider-using-ternary,
-	fixme,
-	global-statement,
-	invalid-name,
-	missing-docstring,
-	no-else-raise,
-	no-else-return,
-	no-self-use,
-	trailing-newlines,
-	too-many-instance-attributes,
-	unused-argument,
-	unused-variable,
-	using-constant-test,
-	no-else-continue,
-	no-else-break,
-	chained-comparison,
-	useless-object-inheritance
+disable=
+    bare-except,
+    broad-except,
+    broad-exception-raised,
+    consider-using-in,
+    consider-using-ternary,
+    consider-using-dict-items,
+    fixme,
+    global-statement,
+    invalid-name,
+    missing-docstring,
+    no-else-raise,
+    no-else-return,
+    trailing-newlines,
+    too-many-instance-attributes,
+    too-many-branches,
+    too-many-statements,
+    unused-argument,
+    unused-variable,
+    using-constant-test,
+    no-else-continue,
+    no-else-break,
+    condition-evals-to-constant,
+    chained-comparison,
+    consider-using-f-string,
+    use-dict-literal,
+    duplicate-code,
+    useless-object-inheritance
 
 # Enable the message, report, category or checker with the given id(s). You can
 # either give multiple identifier separated by comma (,) or put this option
@@ -401,13 +407,6 @@ max-line-length=160
 # Maximum number of lines in a module.
 max-module-lines=10000
 
-# List of optional constructs for which whitespace checking is disabled. `dict-
-# separator` is used to allow tabulation in dicts, etc.: {1  : 1,\n222: 2}.
-# `trailing-comma` allows a space between comma and closing bracket: (a, ).
-# `empty-line` allows space-only lines.
-no-space-check=trailing-comma,
-               dict-separator
-
 # Allow the body of a class to be on the same line as the declaration if body
 # contains single statement.
 single-line-class-stmt=no
@@ -509,5 +508,6 @@ known-third-party=enchant
 
 # Exceptions that will emit a warning when being caught. Defaults to
 # "BaseException, Exception".
-overgeneral-exceptions=BaseException,
-                       Exception
+overgeneral-exceptions=builtins.BaseException,
+                       builtins.Exception
+

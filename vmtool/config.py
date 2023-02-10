@@ -1,20 +1,25 @@
 
 """Nicer config class."""
 
+from typing import Union
 import os
 import os.path
 import re
 import socket
-
+from configparser import MAX_INTERPOLATION_DEPTH, ConfigParser
+from configparser import Error as ConfigError
 from configparser import (
-    NoOptionError, NoSectionError, InterpolationError, InterpolationDepthError, InterpolationSyntaxError,
-    Error as ConfigError, ConfigParser, MAX_INTERPOLATION_DEPTH,
-    Interpolation)
+    Interpolation, InterpolationDepthError, InterpolationError,
+    InterpolationSyntaxError, NoOptionError, NoSectionError,
+)
 
+__all__ = ["Config", "NoOptionError", "ConfigError", "AdvancedInterpolation"]
 
-__all__ = ['Config', 'NoOptionError', 'ConfigError', 'AdvancedInterpolation']
+class _UnSet:
+    pass
 
-_UNSET = object()
+_UNSET = _UnSet()
+
 
 class Config(object):
     """Bit improved ConfigParser.
@@ -38,13 +43,13 @@ class Config(object):
             self.defs = {}
         else:
             self.defs = {
-                'job_name': job_name,
-                'service_name': main_section,
-                'host_name': socket.gethostname(),
+                "job_name": job_name,
+                "service_name": main_section,
+                "host_name": socket.gethostname(),
             }
             if filename:
-                self.defs['config_dir'] = os.path.dirname(filename)
-                self.defs['config_file'] = filename
+                self.defs["config_dir"] = os.path.dirname(filename)
+                self.defs["config_file"] = filename
             if user_defs:
                 self.defs.update(user_defs)
 
@@ -52,12 +57,12 @@ class Config(object):
         self.filename = filename
         self.override = override or {}
         self.cf = ConfigParser(interpolation=AdvancedInterpolation(func_map=func_map),
-                               delimiters=['='], comment_prefixes=['#'], inline_comment_prefixes=['#'])
+                               delimiters=["="], comment_prefixes=["#"], inline_comment_prefixes=["#"])
 
         if filename is None:
             self.cf.add_section(main_section)
         elif not os.path.isfile(filename):
-            raise ConfigError('Config file not found: ' + filename)
+            raise ConfigError("Config file not found: " + filename)
 
         self.reload()
 
@@ -78,11 +83,11 @@ class Config(object):
             for k, v in self.override.items():
                 self.cf.set(self.main_section, k, v)
 
-    def get(self, key, default=_UNSET):
+    def get(self, key: str, default: Union[str, _UnSet] =_UNSET) -> str:
         """Reads string value, if not set then default."""
 
         if not self.cf.has_option(self.main_section, key):
-            if default is _UNSET:
+            if isinstance(default, _UnSet):
                 raise NoOptionError(key, self.main_section)
             return default
 
@@ -156,7 +161,7 @@ class Config(object):
             kv = kv.strip()
             if not kv:
                 continue
-            tmp = kv.split(':', 1)
+            tmp = kv.split(":", 1)
             if len(tmp) > 1:
                 k = tmp[0].strip()
                 v = tmp[1].strip()
@@ -164,7 +169,7 @@ class Config(object):
                 k = kv
                 v = k
             if k in res:
-                raise KeyError('Duplicate key not allowed: %r' % k)
+                raise KeyError("Duplicate key not allowed: %r" % k)
             res[k] = v
         return res
 
@@ -214,33 +219,33 @@ class Config(object):
         return cf
 
 
-_NEW_VAR_OPEN_RX = re.compile(r'\$\$|\$\{')
-_NEW_VAR_BOTH_RX = re.compile(r'\$\$|\$\{|}')
+_NEW_VAR_OPEN_RX = re.compile(r"\$\$|\$\{")
+_NEW_VAR_BOTH_RX = re.compile(r"\$\$|\$\{|}")
 
 
 def _scan_key(cur_sect, cur_key, value, pos, lookup_func):
     dst = []
-    while 1:
+    while True:
         m = _NEW_VAR_BOTH_RX.search(value, pos)
         if not m:
-            raise Exception('Closing brace not found')
+            raise Exception("Closing brace not found")
         pos2 = m.start()
         if pos2 > pos:
             dst.append(value[pos:pos2])
         pos = m.end()
         tok = m.group(0)
-        if tok == '}':
-            subkey = ''.join(dst)
+        if tok == "}":
+            subkey = "".join(dst)
             subval = lookup_func(cur_sect, subkey)
             return subval, pos
-        elif tok == '$$':
-            dst.append('$')
-        elif tok == '${':
+        elif tok == "$$":
+            dst.append("$")
+        elif tok == "${":
             subval, pos = _scan_key(cur_sect, cur_key, value, pos, lookup_func)
             dst.append(subval)
         else:
             break
-    raise Exception('bad token')
+    raise Exception("bad token")
 
 
 def new_interpolate(cur_sect, cur_key, value, lookup_func):
@@ -269,27 +274,27 @@ def new_interpolate(cur_sect, cur_key, value, lookup_func):
             dst.append(value[pos:pos2])
         pos = m.end()
         tok = m.group(0)
-        if tok == '$$':
-            dst.append('$')
-        elif tok == '${':
+        if tok == "$$":
+            dst.append("$")
+        elif tok == "${":
             subval, pos = _scan_key(cur_sect, cur_key, value, pos, lookup_func)
             dst.append(subval)
         else:
-            raise InterpolationSyntaxError(cur_key, cur_sect, 'Interpolation parse error')
-    return ''.join(dst)
+            raise InterpolationSyntaxError(cur_key, cur_sect, "Interpolation parse error")
+    return "".join(dst)
 
 
 class AdvancedInterpolation(Interpolation):
     _func_map = None
 
     def __init__(self, func_map=None):
-        super(AdvancedInterpolation, self).__init__()
+        super().__init__()
         self._func_map = func_map
 
     def before_get(self, parser, section, option, value, defaults):
         dst = []
         self._interpolate_ext_new(dst, parser, section, option, value, defaults, set())
-        return ''.join(dst)
+        return "".join(dst)
 
     def before_set(self, parser, section, option, value):
         # cannot validate complex interpolation with regex
@@ -304,22 +309,22 @@ class AdvancedInterpolation(Interpolation):
 
         xloop = (section, option)
         if xloop in loop_detect:
-            raise InterpolationError(option, section, 'Loop detected: %r in %r' % (xloop, loop_detect))
+            raise InterpolationError(option, section, "Loop detected: %r in %r" % (xloop, loop_detect))
         loop_detect.add(xloop)
 
         def lookup_helper(lk_section, lk_option):
-            if '!' in lk_option:
-                funcname, val = lk_option.split('!', 1)
+            if "!" in lk_option:
+                funcname, val = lk_option.split("!", 1)
                 func = None
                 if self._func_map:
                     func = self._func_map.get(funcname.strip())
                 if not func:
-                    raise InterpolationError(option, section, 'Unknown interpolation function: %r' % funcname)
+                    raise InterpolationError(option, section, "Unknown interpolation function: %r" % funcname)
                 return func(val.strip(), lk_section, lk_option)
 
             # normal fetch
-            if ':' in lk_option:
-                ksect, key = lk_option.split(':', 1)
+            if ":" in lk_option:
+                ksect, key = lk_option.split(":", 1)
                 ksect, key = ksect.strip(), key.strip()
                 use_vars = None
             else:
@@ -328,10 +333,10 @@ class AdvancedInterpolation(Interpolation):
             key = parser.optionxform(key)
             newpart = parser.get(ksect, key, raw=True, vars=use_vars)
             if newpart is None:
-                raise InterpolationError(key, ksect, 'Key referenced is None')
+                raise InterpolationError(key, ksect, "Key referenced is None")
             dst = []
             self._interpolate_ext_new(dst, parser, ksect, key, newpart, defaults, loop_detect)
-            return ''.join(dst)
+            return "".join(dst)
 
         val = new_interpolate(section, option, rawval, lookup_helper)
         dst.append(val)
