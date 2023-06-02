@@ -34,6 +34,7 @@ import botocore.config
 from vmtool.certs import load_cert_config
 from vmtool.config import Config, NoOptionError
 from vmtool.envconfig import load_env_config, find_gittop
+from vmtool.gpg import load_gpg_file
 from vmtool.scripting import EnvScript, UsageError
 from vmtool.tarfilter import TarFilter
 from vmtool.terra import tf_load_output_var, tf_load_all_vars
@@ -228,43 +229,14 @@ class VmTool(EnvScript):
             self.cf.set("vm_disk_names_size_order", ", ".join([elem[2] for elem in size_order]))
             self.cf.set("vm_disk_names_api_order", ", ".join(api_order))
 
-    _gpg_cache = None
-    def load_gpg_file(self, fn):
-        if self._gpg_cache is None:
-            self._gpg_cache = {}
-        if fn in self._gpg_cache:
-            return self._gpg_cache[fn]
-        if self.options.verbose:
-            printf("GPG: %s", fn)
-        # file data directly
-        if not os.path.isfile(fn):
-            raise UsageError("GPG file not found: %s" % fn)
-        data = self.popen(['gpg', '-q', '-d', '--batch', fn])
-        res = as_unicode(data)
-        self._gpg_cache[fn] = res
-        return res
-
     def load_gpg_config(self, fn, main_section):
         realfn = os.path.join(self.keys_dir, fn)
         if not os.path.isfile(realfn):
             raise UsageError("GPG file not found: %s" % realfn)
-        data = self.load_gpg_file(realfn)
+        data = load_gpg_file(realfn, self.options.verbose)
         cf = Config(main_section, None)
         cf.cf.read_string(data, source=realfn)
         return cf
-
-    def popen(self, cmd, input_data=None, **kwargs):
-        """Read command stdout, check for exit code.
-        """
-        pipe = subprocess.PIPE
-        if input_data is not None:
-            p = subprocess.Popen(cmd, stdin=pipe, stdout=pipe, stderr=pipe, **kwargs)
-        else:
-            p = subprocess.Popen(cmd, stdout=pipe, stderr=pipe, **kwargs)
-        out, err = p.communicate(input_data)
-        if p.returncode != 0:
-            raise Exception("command failed: %r - %r" % (cmd, err.strip()))
-        return out
 
     def load_command_docs(self):
         doc = self.__doc__.strip()
@@ -814,7 +786,7 @@ class VmTool(EnvScript):
         else:
             gpg_fn = self.cf.get('ssh_privkey_file')
         gpg_fn = os.path.join(self.keys_dir, gpg_fn)
-        kdata = self.load_gpg_file(gpg_fn).strip()
+        kdata = load_gpg_file(gpg_fn, self.options.verbose).strip()
 
         raw_fn = os.path.basename(gpg_fn).replace('.gpg', '')
 
@@ -2617,7 +2589,7 @@ class VmTool(EnvScript):
         if not os.path.isfile(fn):
             raise UsageError('%s - FILE missing: %s' % (kname, arg))
         if fn.endswith('.gpg'):
-            return self.load_gpg_file(fn).rstrip('\n')
+            return load_gpg_file(fn, self.options.verbose).rstrip('\n')
         return open(fn, 'r').read().rstrip('\n')
 
     def conf_func_key(self, arg, sect, kname):
@@ -2647,7 +2619,7 @@ class VmTool(EnvScript):
             state_file, arg = [s.strip() for s in arg.split(":", 1)]
         else:
             state_file = self.cf.get('tf_state_file')
-        val = tf_load_output_var(state_file, arg)
+        val = tf_load_output_var(state_file, arg, self.options.verbose)
 
         # configparser expects strings
         if isinstance(val, str):
@@ -2710,7 +2682,7 @@ class VmTool(EnvScript):
             state_file, arg = [s.strip() for s in arg.split(":", 1)]
         else:
             state_file = self.cf.get('tf_state_file')
-        val = tf_load_output_var(state_file, arg)
+        val = tf_load_output_var(state_file, arg, self.options.verbose)
         if not isinstance(val, list):
             raise UsageError("TFAZ function expects list param: %s" % kname)
         if self.availability_zone < 0 or self.availability_zone >= len(val):
@@ -3858,7 +3830,7 @@ class VmTool(EnvScript):
         Group: config
         """
         state_file = self.cf.get('tf_state_file')
-        tfvars = tf_load_all_vars(state_file)
+        tfvars = tf_load_all_vars(state_file, self.options.verbose)
         for k in sorted(tfvars.keys()):
             parts = k.split('.')
             if len(parts) <= 3 or self.options.all:
