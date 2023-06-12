@@ -3,11 +3,13 @@
 
 import json
 
+from vmtool.gpg import load_gpg_file
+
 __all__ = ['tf_load_output_var', 'tf_load_all_vars']
 
 
-def tf_load_output_var(state_file, name):
-    keys = tf_load_all_vars(state_file)
+def tf_load_output_var(state_file, name, verbose):
+    keys = tf_load_all_vars(state_file, verbose)
     if name not in keys:
         raise KeyError('%s: TF module does not have output: %s' % (state_file, name))
     return keys[name]
@@ -49,10 +51,13 @@ def _load_state_v4(state):
 
 _tf_cache = {}
 
-def tf_load_all_vars(state_file):
+def tf_load_all_vars(state_file, verbose):
     if state_file in _tf_cache:
         return _tf_cache[state_file]
-    state = json.load(open(state_file))
+    if state_file.endswith('.gpg'):
+        state = json.loads(load_gpg_file(state_file, verbose))
+    else:
+        state = json.load(open(state_file))
     if state['version'] == 3:
         res = _load_state_v3(state)
     elif state['version'] == 4:
