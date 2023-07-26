@@ -34,6 +34,7 @@ REGION_TO_DESC_NEW = {
     "ap-southeast-4": "Asia Pacific (Melbourne)",
     "eu-central-2": "Europe (Zurich)",
     "eu-south-2": "Europe (Spain)",
+    "il-central-1": "Israel (Tel Aviv)",
     "me-central-1": "Middle East (UAE)",
 
     # AWS Local Zones
@@ -42,6 +43,8 @@ REGION_TO_DESC_NEW = {
     "ap-south-1-ccu-1a": "India (Kolkata)",
     "ap-south-1-del-1a": "India (Delhi)",
     "ap-southeast-1-bkk-1a": "Thailand (Bangkok)",
+    "ap-southeast-1-mnl-1a": "Philippines (Manila)",
+    "ap-southeast-2-akl-1a": "New Zealand (Auckland)",
     "ap-southeast-2-per-1a": "Australia (Perth)",
     "eu-central-1-ham-1a": "Germany (Hamburg)",
     "eu-central-1-waw-1a": "Poland (Warsaw)",
