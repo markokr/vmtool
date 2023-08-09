@@ -117,8 +117,7 @@ REGION_TO_DESC_NEW = {
 REGION_TO_DESC.update(REGION_TO_DESC_NEW)
 DESC_TO_REGION = {v: k for k, v in REGION_TO_DESC.items()}
 
-# CPU feature words
-CPU_FEATURES = ["AVX", "AVX2", "AVX512", "Turbo", "Deep"]
+# CPU feature words to ignore
 CPU_FEATURES_HIDE = ["AVX", "AVX2", "Turbo", "Intel", "AMD", "ENA", "Learning", "Boost"]
 
 # human readable CPU names
@@ -133,6 +132,7 @@ XEONS = [
     "X6 KabyL",
     "X7 CascadeL",
     "X8 IceL",
+    "X9 Sapphire",
 ]
 
 EPYC_V1 = "E1 Naples"
@@ -202,8 +202,9 @@ CPU_CODES = {
     "Intel Xeon Platinum 8275CL (Cascade Lake)": xeon(7, "P-8275CL"),
     "Intel Xeon Platinum 8280L (Cascade Lake)": xeon(7, "P-8280L"),
     "Intel Xeon Scalable (Skylake)": xeon(5, "P-8176M"),
-    "Intel Xeon Scalable (Icelake)": xeon(8, "P-8375C?"),
+    "Intel Xeon Scalable (Icelake)": xeon(8, "P-8375C"),
     "Intel Xeon 8375C (Ice Lake)": xeon(8, "P-8375C"),
+    "Intel Xeon Scalable (Sapphire Rapids)": xeon(9, "P-8488C"),
     "Variable": "Variable",
 }
 
@@ -468,13 +469,7 @@ def getFeatures(rec):
     """
     info = rec["product"]["attributes"]
     pfeat = info.get("processorFeatures", "").replace(",", " ").replace(";", " ").split()
-    if 1:
-        return pfeat
-    res = []
-    for f in CPU_FEATURES:
-        if f in pfeat:
-            res.append(f)
-    return res
+    return pfeat
 
 
 def getRegion(rec):
