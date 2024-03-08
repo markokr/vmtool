@@ -2939,7 +2939,8 @@ class VmTool(EnvScript):
                     with open(real_fn, 'rb') as f:
                         st = os.fstat(f.fileno())
                         data = f.read()
-                        dst.add_file_data(fn, data, st.st_mode & stat.S_IRWXU, st.st_mtime)
+                        mode = 0o755 if st.st_mode & stat.S_IXUSR else 0o644
+                        dst.add_file_data(fn, data, mode, st.st_mtime)
 
         # pass parameters to cert.ini files
         defs = {'env_name': self.env_name}
