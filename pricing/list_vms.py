@@ -12,111 +12,6 @@ import re
 import sys
 import tabulate
 
-import botocore.session
-
-
-#
-# region code to desc maps
-#
-# https://github.com/boto/botocore/blob/develop/botocore/data/endpoints.json
-# https://aws.amazon.com/about-aws/global-infrastructure/regions_az/
-# https://aws.amazon.com/about-aws/global-infrastructure/localzones/locations/
-# https://aws.amazon.com/wavelength/locations/
-#
-AWS_ENDPOINTS = botocore.session.get_session().get_data("endpoints")
-REGION_TO_DESC = {
-    r: rv["description"].replace("Europe", "EU")
-    for part in AWS_ENDPOINTS["partitions"]
-        for r, rv in part["regions"].items()
-}
-REGION_TO_DESC_NEW = {
-    "ap-south-2": "Asia Pacific (Hyderabad)",
-    "ap-southeast-4": "Asia Pacific (Melbourne)",
-    "eu-central-2": "Europe (Zurich)",
-    "eu-south-2": "Europe (Spain)",
-    "il-central-1": "Israel (Tel Aviv)",
-    "me-central-1": "Middle East (UAE)",
-
-    # AWS Local Zones
-    "af-south-1-los-1a": "Nigeria (Lagos)",
-    "ap-northeast-1-tpe-1a": "Taiwan (Taipei)",
-    "ap-south-1-ccu-1a": "India (Kolkata)",
-    "ap-south-1-del-1a": "India (Delhi)",
-    "ap-southeast-1-bkk-1a": "Thailand (Bangkok)",
-    "ap-southeast-1-mnl-1a": "Philippines (Manila)",
-    "ap-southeast-2-akl-1a": "New Zealand (Auckland)",
-    "ap-southeast-2-per-1a": "Australia (Perth)",
-    "eu-central-1-ham-1a": "Germany (Hamburg)",
-    "eu-central-1-waw-1a": "Poland (Warsaw)",
-    "eu-north-1-cph-1a": "Denmark (Copenhagen)",
-    "eu-north-1-hel-1a": "Finland (Helsinki)",
-    "me-south-1-mct-1a": "Oman (Muscat)",
-    "us-east-1-atl-1a": "US East (Atlanta)",
-    "us-east-1-bos-1": "US East (Boston)",
-    "us-east-1-bue-1a": "Argentina (Buenos Aires)",
-    "us-east-1-chi-1a": "US East (Chicago)",
-    "us-east-1-dfw-1a": "US East (Dallas)",
-    "us-east-1-iah-1": "US East (Houston)",
-    "us-east-1-lim-1a": "Peru (Lima)",
-    "us-east-1-mci-1a": "US East (Kansas City 2)",
-    "us-east-1-mia-1": "US East (Miami)",
-    "us-east-1-msp-1a": "US East (Minneapolis)",
-    "us-east-1-nyc-1a": "US East (New York City)",
-    "us-east-1-phl-1a": "US East (Philadelphia)",
-    "us-east-1-qro-1a": "Mexico (Queretaro)",
-    "us-east-1-scl-1a": "Chile (Santiago)",
-    "us-west-2-den-1a": "US West (Denver)",
-    "us-west-2-las-1a": "US West (Las Vegas)",
-    "us-west-2-lax-1a": "US West (Los Angeles)",
-    "us-west-2-pdx-1a": "US West (Portland)",
-    "us-west-2-phx-1a": "US West (Phoenix)",
-    "us-west-2-sea-1a": "US West (Seattle)",
-
-    # Bell Wavelength Zones
-    "ca-central-1-wl1-yto-wlz-1": "Canada (BELL) - Toronto",
-
-    # KDDI Wavelength Zones
-    "ap-northeast-1-wl1-kix-wlz-1": "Asia Pacific (KDDI) - Osaka",
-    "ap-northeast-1-wl1-nrt-wlz-1": "Asia Pacific (KDDI) - Tokyo",
-
-    # SK Telecom Wavelength Zones
-    "ap-northeast-2-wl1-cjj-wlz-1": "Asia Pacific (SKT) - Daejeon",
-    "ap-northeast-2-wl1-sel-wlz-1": "Asia Pacific (SKT) - Seoul",
-
-    # Vodafone Wavelength Zones
-    "eu-central-1-wl1-ber-wlz-1": "Europe (Vodafone) - Berlin",
-    "eu-central-1-wl1-dtm-wlz-1": "Europe (Vodafone) - Dortmund",
-    "eu-central-1-wl1-muc-wlz-1": "Europe (Vodafone) - Munich",
-    "eu-west-2-wl1-lon-wlz-1": "Europe (Vodafone) - London",
-    "eu-west-2-wl1-man-wlz-1": "Europe (Vodafone) - Manchester",
-
-    # Verizon Wavelength Zones
-    "us-east-1-wl1-atl-wlz-1": "US East (Verizon) - Atlanta",
-    "us-east-1-wl1-bna-wlz-1": "US East (Verizon) - Nashville",
-    "us-east-1-wl1-bos-wlz-1": "US East (Verizon) - Boston",
-    "us-east-1-wl1-chi-wlz-1": "US East (Verizon) - Chicago",
-    "us-east-1-wl1-clt-wlz-1": "US East (Verizon) - Charlotte",
-    "us-east-1-wl1-dfw-wlz-1": "US East (Verizon) - Dallas",
-    "us-east-1-wl1-dtw-wlz-1": "US East (Verizon) - Detroit",
-    "us-east-1-wl1-iah-wlz-1": "US East (Verizon) - Houston",
-    "us-east-1-wl1-mia-wlz-1": "US East (Verizon) - Miami",
-    "us-east-1-wl1-msp-wlz-1": "US East (Verizon) - Minneapolis",
-    "us-east-1-wl1-nyc-wlz-1": "US East (Verizon) - New York",
-    "us-east-1-wl1-tpa-wlz-1": "US East (Verizon) - Tampa",
-    "us-east-1-wl1-was-wlz-1": "US East (Verizon) - Washington DC",
-    "us-west-2-wl1-den-wlz-1": "US West (Verizon) - Denver",
-    "us-west-2-wl1-las-wlz-1": "US West (Verizon) - Las Vegas",
-    "us-west-2-wl1-lax-wlz-1": "US West (Verizon) - Los Angeles",
-    "us-west-2-wl1-phx-wlz-1": "US West (Verizon) - Phoenix",
-    "us-west-2-wl1-sea-wlz-1": "US West (Verizon) - Seattle",
-    "us-west-2-wl1-sfo-wlz-1": "US West (Verizon) - San Francisco Bay Area",
-}
-#DROP = [k for k in REGION_TO_DESC_NEW if k in REGION_TO_DESC]
-#assert not DROP, DROP
-
-REGION_TO_DESC.update(REGION_TO_DESC_NEW)
-DESC_TO_REGION = {v: k for k, v in REGION_TO_DESC.items()}
-
 # CPU feature words to ignore
 CPU_FEATURES_HIDE = ["AVX", "AVX2", "Turbo", "Intel", "AMD", "ENA", "Learning", "Boost"]
 
@@ -477,8 +372,7 @@ def getFeatures(rec):
 def getRegion(rec):
     """Return region name based on location desc.
     """
-    info = rec["product"]["attributes"]
-    return DESC_TO_REGION.get(info["location"], info["location"])
+    return rec["product"]["attributes"]["regionCode"]
 
 
 def convert(rec):
@@ -636,11 +530,6 @@ def setupFilter(args):
     p.add_argument("vmtype", help="specific vm types (patterns)", nargs="*")
     ns = p.parse_args(args)
 
-    if ns.showRegions:
-        tbl = [[reg, REGION_TO_DESC[reg]] for reg in sorted(REGION_TO_DESC)]
-        print(tabulate.tabulate(tbl, (), "plain"))
-        sys.exit(0)
-
     if ns.reserved:
         a = ns.reserved
         assert a[0] in "13" and a[1] in "npa" and a[2] in "sc"
@@ -728,6 +617,7 @@ class Filter:
 
         self.showReserved = ns.showReserved
         self.showPMU = ns.showPMU
+        self.showRegions = ns.showRegions
 
         self.task = ns.task.lower() if ns.task else ""
 
@@ -857,6 +747,14 @@ def showPMU(selected):
         print(f"{vm_type}: {got[vm_type]}")
 
 
+def showRegions(selected):
+    collect = set()
+    for rec in selected:
+        info = rec["product"]["attributes"]
+        collect.add((info["regionCode"], info["location"]))
+    print(tabulate.tabulate(list(sorted(collect)), (), "plain"))
+
+
 def load_json(fn):
     gzfn = fn + ".gz"
     if os.path.isfile(gzfn):
@@ -881,6 +779,8 @@ def main():
         showReserved(selected)
     elif flt.showPMU:
         showPMU(selected)
+    elif flt.showRegions:
+        showRegions(data)
     else:
         rows = [TABLE_HEADER]
         rows.extend(convert(rec) for rec in selected)
