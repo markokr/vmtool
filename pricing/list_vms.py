@@ -755,12 +755,58 @@ def showRegions(selected):
     print(tabulate.tabulate(list(sorted(collect)), (), "plain"))
 
 
-def load_json(fn):
+def load_json_stream(f):
+    BLOCKSIZE = 412*1024
+    CHUNKSIZE = 16*1024
+    decoder = json.JSONDecoder()
+    skip_rc = re.compile(r"[ \r\n\t,]+", re.A)
+
+    def skip(buf, pos):
+        m = skip_rc.match(buf, pos)
+        return m.end() if m else pos
+
+    buf = ""
+    pos = 0
+    first = True
+    while True:
+        blk = f.read(BLOCKSIZE)
+        if not blk:
+            break
+        buf = buf[pos:] + blk
+        pos = 0
+
+        if first:
+            pos = skip(buf, pos)
+            if buf[pos] != "[":
+                raise ValueError(f"expect list, got {buf[pos]!r}")
+            pos = skip(buf, pos + 1)
+            first = False
+
+        cutpos = len(buf) - CHUNKSIZE
+        while pos < cutpos:
+            try:
+                obj, pos = decoder.raw_decode(buf, pos)
+            except json.JSONDecodeError:
+                CHUNKSIZE *= 2
+                break
+            pos = skip(buf, pos)
+            yield obj
+
+    while pos < len(buf) and buf[pos] != "]":
+        obj, pos = decoder.raw_decode(buf, pos)
+        pos = skip(buf, pos)
+        yield obj
+
+
+def open_json(fn):
     gzfn = fn + ".gz"
     if os.path.isfile(gzfn):
-        with gzip.open(gzfn, 'rt') as f:
-            return json.load(f)
-    with open(fn, 'r') as f:
+        return gzip.open(gzfn, 'rt')
+    return open(fn, 'r')
+
+
+def load_json(fn):
+    with open_json(fn) as f:
         return json.load(f)
 
 
@@ -772,15 +818,24 @@ def main():
     cache_dir = os.environ.get("PRICING_CACHE_DIR", cache_dir)
     flt = setupFilter(sys.argv[1:])
     src = os.path.join(cache_dir, "ec2.all.json")
-    data = load_json(src)
-    selected = [rec for rec in data if flt.match(rec)]
-    selected = sorted(selected, key=getSortKey)
+
+    if flt.showRegions:
+        showRegions(load_json(src))
+        return
+
+    with open_json(src) as f:
+        selected = sorted(
+            (
+                rec for rec in load_json_stream(f)
+                if flt.match(rec)
+            ),
+            key=getSortKey
+        )
+
     if flt.showReserved:
         showReserved(selected)
     elif flt.showPMU:
         showPMU(selected)
-    elif flt.showRegions:
-        showRegions(data)
     else:
         rows = [TABLE_HEADER]
         rows.extend(convert(rec) for rec in selected)
