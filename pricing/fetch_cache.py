@@ -50,7 +50,7 @@ def write_cache(fn, pclient, **kwargs):
     """
     res = get_products(pclient, **kwargs)
     with gzip.open(fn + ".gz", "wt") as f:
-        json.dump(res, f, indent=2)
+        json.dump(res, f, separators=(",", ":"))
 
 
 def get_region_desc(region, partition="aws"):
