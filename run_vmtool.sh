@@ -2,7 +2,7 @@
 
 # run vmtool in automatically generated virtualenv
 
-CURVER=11
+CURVER=12
 PYTHON=python3
 
 script="$0"
