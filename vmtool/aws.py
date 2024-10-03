@@ -958,14 +958,14 @@ class VmTool(EnvScript):
         time_printf("Waiting for image copy, boot and SSH host key generation")
         client = self.get_ec2_client()
         keys = None
-        time.sleep(30)
+        time.sleep(15)
         retry = 0
-        for i in range(100):
-            time.sleep(30)
+        for i in range(300):
+            time.sleep(5)
             # load console buffer from EC2
             for retry in range(3):
                 try:
-                    cres = client.get_console_output(InstanceId=vm_id)
+                    cres = client.get_console_output(InstanceId=vm_id, Latest=True)
                     break
                 except socket.error as ex:
                     if ex.errno != errno.ETIMEDOUT:
