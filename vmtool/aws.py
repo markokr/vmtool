@@ -304,6 +304,8 @@ class VmTool(EnvScript):
         p.add_argument("--running", action="store_true", help="Show only running instances")
         p.add_argument("--az", type=int, help="Set availability zone")
         p.add_argument("--tmux", action="store_true", help="Wrap session in tmux")
+        p.add_argument("-r", help="Filter by role name, wildcards * and ? can be used", dest="role_filter")
+        p.add_argument("-s", action="store_true", help="Sort first by role name", dest="sort_by_role")
         return p
 
     def get_boto3_session(self, region=None):
@@ -626,7 +628,11 @@ class VmTool(EnvScript):
             if sys.platform.startswith('win'):
                 use_colors = False
 
-        vm_list = sorted(vm_list, key=lambda vm: vm['LaunchTime'])
+        if self.options.sort_by_role:
+            vm_list = sorted(vm_list, key=lambda vm: (
+            next(t['Value'] for t in vm['Tags'] if t['Key'] == 'Role'), vm['LaunchTime']))
+        else:
+            vm_list = sorted(vm_list, key=lambda vm: vm['LaunchTime'])
 
         extra_verbose = self.options.verbose and self.options.verbose > 1
         vol_map = {}
@@ -1042,9 +1048,10 @@ class VmTool(EnvScript):
     def get_env_filters(self):
         """Return default filters based on command-line swithces.
         """
-        return self.make_env_filters(role_name=self.role_name, running=self.options.running, allenvs=self.options.all)
+        return self.make_env_filters(role_name=self.role_name, running=self.options.running, allenvs=self.options.all,
+                                     role_filter=self.options.role_filter)
 
-    def make_env_filters(self, role_name=None, running=True, allenvs=False):
+    def make_env_filters(self, role_name=None, running=True, allenvs=False, role_filter=None):
         """Return filters for instance listing.
         """
         filters = []
@@ -1056,6 +1063,9 @@ class VmTool(EnvScript):
 
         if running:
             filters.append({'Name': 'instance-state-name', 'Values': ['running']})
+
+        if role_filter:
+            filters.append({"Name": "tag:Role", "Values": [role_filter]})
 
         return filters
 
