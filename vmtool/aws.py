@@ -4477,12 +4477,17 @@ class VmTool(EnvScript):
                 msgtarget = ''
                 if mod.get("TargetThroughput") and mod.get("OriginalThroughput"):
                     msgtarget = " oldthroughput={OriginalThroughput} newthroughput={TargetThroughput}".format(**mod)
+                msgiops = ''
+                if mod.get("OriginalIops") and mod.get("TargetIops"):
+                    msgiops = " oldiops={OriginalIops} newiops={TargetIops}".format(**mod)
                 printf(
                     "{VolumeId}: state={ModificationState}"
                     " oldsize={OriginalSize} newsize={TargetSize}"
-                    " oldiops={OriginalIops} newiops={TargetIops}"
+                    "{msgiops}"
                     "{msgtarget}"
-                    " progress={Progress}%{msgstatus}".format(msgstatus=msgstatus, msgtarget=msgtarget, **mod))
+                    " progress={Progress}%{msgstatus}".format(
+                        msgstatus=msgstatus, msgtarget=msgtarget, msgiops=msgiops, **mod
+                ))
 
             if not incomplete:
                 break
