@@ -275,9 +275,9 @@ def getNetBW(rec):
         return float(OLD_NET[net].replace('~', ''))
     parts = net.split()
     if parts[-1] == "Gigabit":
-        return int(parts[-2])
+        return float(parts[-2])
     elif parts[-1] == "Megabit":
-        return int(parts[-2]) // 1000
+        return float(parts[-2]) // 1000
     else:
         return int(net, 10)
 
