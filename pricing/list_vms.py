@@ -74,7 +74,7 @@ CPU_CODES = {
     "AWS Graviton Processor": AWS_GRAVITON,
     "AWS Graviton2 Processor": AWS_GRAVITON2,
     "AWS Graviton3 Processor": AWS_GRAVITON3,
-    "High Fequency Intel Xeon E7-8880 v3 (Haswell)": xeon(3, "E7-8880"),
+    "High Frequency Intel Xeon E7-8880 v3 (Haswell)": xeon(3, "E7-8880"),
     "Intel Skylake E5 2686 v5 (2.5 GHz)": xeon(5, "E5-2686"),
     "Intel Skylake E5 2686 v5": xeon(5, "E5-2686"),
     "Intel Xeon E5-2650": xeon(1, "E5-2650"),
