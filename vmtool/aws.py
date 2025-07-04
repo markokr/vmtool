@@ -200,6 +200,7 @@ class VmTool(EnvScript):
             'NETWORK': self.conf_func_network,
             'NETMASK': self.conf_func_netmask,
             'MEMBERS': self.conf_func_members,
+            'SECONDARY_VM': self.conf_func_secondary_vm,
         })
         self.process_pkgs()
 
@@ -1151,6 +1152,16 @@ class VmTool(EnvScript):
             #    return vm
 
         raise UsageError("Primary VM not found: %s" % role_name)
+
+    def get_secondary_for_role(self, role_name):
+        """Return the newest secondary VM for the role.
+        """
+        filters = self.make_env_filters(role_name=role_name)
+        filters.append({'Name': 'tag:VmState', 'Values': [VmState.SECONDARY]})
+        vms = list(self.ec2_iter_instances(Filters=filters))
+        if not vms:
+            return None
+        return sorted(vms, key=lambda v: v['LaunchTime']).pop()
 
     def get_primary_vms(self):
         if self.options.all_role_vms:
@@ -2705,6 +2716,14 @@ class VmTool(EnvScript):
         Usage: ${PRIMARY_VM ! ${other_role}}
         """
         vm = self.get_primary_for_role(arg)
+        return vm['InstanceId']
+
+    def conf_func_secondary_vm(self, arg, sect, kname):
+        """Lookup the newest secondary VM. If no secondary VM-s, return primary.
+
+        Usage: ${SECONDARY_VM ! ${role}}
+        """
+        vm = self.get_secondary_for_role(arg) or self.get_primary_for_role(arg)
         return vm['InstanceId']
 
     def conf_func_network(self, arg, sect, kname):
