@@ -28,16 +28,22 @@ XEONS = [
     "X7 CascadeL",
     "X8 IceL",
     "X9 Sapphire",
+    "X10 Emerald",
+    "X11 Granite",
 ]
 
 EPYC_V1 = "E1 Naples"
 EPYC_V2 = "E2 Rome"
 EPYC_V3 = "E3 Milan"
 EPYC_V4 = "E4 Genoa"
+EPYC_V5 = "E5 Turin"
 
 AWS_GRAVITON = "G1 ARMv8"
 AWS_GRAVITON2 = "G2 ARMv82"
 AWS_GRAVITON3 = "G3 ARMv84"
+AWS_GRAVITON4 = "G4 ARMv90"
+
+NVIDIA_GRACE = "N1 Grace"
 
 def xeon(n, tag):
     return XEONS[n]  # + " " + tag
@@ -71,9 +77,12 @@ CPU_CODES = {
     "AMD EPYC 7R32": EPYC_V2,
     "AMD EPYC 7R13 Processor": EPYC_V3,
     "AMD EPYC 9R14 Processor": EPYC_V4,
+    "AMD EPYC 9R45 Processor": EPYC_V5,
     "AWS Graviton Processor": AWS_GRAVITON,
     "AWS Graviton2 Processor": AWS_GRAVITON2,
     "AWS Graviton3 Processor": AWS_GRAVITON3,
+    "AWS Graviton4 Processor": AWS_GRAVITON4,
+    "NVIDIA Grace": NVIDIA_GRACE,
     "High Frequency Intel Xeon E7-8880 v3 (Haswell)": xeon(3, "E7-8880"),
     "Intel Skylake E5 2686 v5 (2.5 GHz)": xeon(5, "E5-2686"),
     "Intel Skylake E5 2686 v5": xeon(5, "E5-2686"),
@@ -102,6 +111,8 @@ CPU_CODES = {
     "Intel Xeon Scalable (Icelake)": xeon(8, "P-8375C"),
     "Intel Xeon 8375C (Ice Lake)": xeon(8, "P-8375C"),
     "Intel Xeon Scalable (Sapphire Rapids)": xeon(9, "P-8488C"),
+    "Intel Xeon Scalable (Emerald Rapids)": xeon(10, 'Xeon-5-gen'),
+    "Intel Xeon Scalable (Granite Rapids)": xeon(11, 'Xeon-6-gen'),
     "Variable": "Variable",
 }
 
@@ -341,24 +352,24 @@ def getClockSpeed(rec):
     return 0.1
 
 
+_rx_storage = r"^(?:(\d+)\s+x\s+)?(\d+)(?:\s*(?:gb|nvme|ssd|hdd))*$"
+_rc_storage = re.compile(_rx_storage, re.A)
+
 def getLocalStorage(rec):
     """Return local SSD storage in GBs.
     """
     info = rec["product"]["attributes"]
-    storage = info["storage"]
-    if storage.lower() == "ebs only":
+    storage = info["storage"].lower()
+    if storage == "ebs only":
         return 0, 0, 0
-
-    parts = storage.split()
-    if parts[1] == "x":
-        a = int(parts[0])
-        b = int(parts[2].replace(",", ""))
-        return a, b, a * b
-    if parts[1:] == ["GB", "NVMe", "SSD"]:
-        a = 1
-        b = int(parts[0])
-        return a, b, a * b
-    raise Exception("cannot parse storage: %r" % storage)
+    m = _rc_storage.match(storage)
+    if not m:
+        s, vm = info['storage'], info['instanceType']
+        msg = f"cannot parse storage: [{s}] instance={vm}"
+        raise Exception(msg)
+    a = int(m.group(1) or "1")
+    b = int(m.group(2))
+    return a, b, a * b
 
 
 def getFeatures(rec):
@@ -643,7 +654,7 @@ class Filter:
         cpu = int(info["vcpu"])
         speed = getClockSpeed(rec)
         local = getLocalStorage(rec)[2]
-        gpu = int(info.get("gpu", "0"))
+        gpu = float(info.get("gpu", "0"))
         normalizationSizeFactor = info.get("normalizationSizeFactor", "NA")
         if normalizationSizeFactor == "NA":
             normalizationSizeFactor = "0"
