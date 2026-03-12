@@ -21,9 +21,31 @@ TAR_EXEC_MODE = TAR_DIR_MODE
 
 
 class TarBall(object):
-    def __init__(self):
+    def __init__(self, comp='xz', compresslevel=9):
+        """Initialize TarBall with configurable compression.
+
+        Args:
+            comp: Compression algorithm ('gz', 'bz2', 'xz', or '' for none)
+            compresslevel: Compression level (1-9, where 9 is highest compression)
+                          Default is 9 for maximum compression of text scripts
+        """
         self.buf = io.BytesIO()
-        self.tf = tarfile.open('buf.tgz', 'w|gz', self.buf, format=tarfile.PAX_FORMAT)
+        self.comp = comp
+        self.compresslevel = compresslevel
+
+        # Build tarfile mode string
+        if comp:
+            mode = 'w|' + comp
+        else:
+            mode = 'w|'
+
+        # Open with compression level if supported and specified
+        if compresslevel is not None and comp in ('gz', 'bz2', 'xz'):
+            self.tf = tarfile.open('buf.tar.' + comp, mode, self.buf,
+                                   format=tarfile.PAX_FORMAT, compresslevel=compresslevel)
+        else:
+            self.tf = tarfile.open('buf.tar.' + comp, mode, self.buf,
+                                   format=tarfile.PAX_FORMAT)
 
     def filter_data(self, fname, data):
         """Overridable function."""
