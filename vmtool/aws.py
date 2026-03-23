@@ -2276,7 +2276,7 @@ class VmTool(EnvScript):
         # actual launch
         res = client.run_instances(**args)
 
-        time.sleep(20)      # FIXME
+        time.sleep(10)      # FIXME
 
         # collect ids
         ids = []
@@ -2591,11 +2591,11 @@ class VmTool(EnvScript):
             script.append(mk_sshuser_script(user, auth_groups, pubkey))
         return '\n'.join(script)
 
-    def make_tar_filter(self, extra_defs=None):
+    def make_tar_filter(self, extra_defs=None, comp='xz', compresslevel=9):
         defs = {}
         if extra_defs:
             defs.update(extra_defs)
-        tb = TarFilter(self.filter_key_lookup, defs)
+        tb = TarFilter(self.filter_key_lookup, defs, comp=comp, compresslevel=compresslevel)
         tb.set_live(self.is_live)
         return tb
 
@@ -2931,7 +2931,18 @@ class VmTool(EnvScript):
         if not mods_ok:
             sys.exit(1)
 
-        dst = self.make_tar_filter(defs)
+        # allow compression algorithm to be configured; default is xz (best for text)
+        # options: 'gz' (gzip), 'bz2' (bzip2), 'xz' (lzma), or '' (no compression)
+        comp = self.cf.get('tgz_compression', 'xz')
+        # compression level (1-9, where 9 is highest); default is 9 for maximum compression
+        compresslevel = 9
+        try:
+            compresslevel = self.cf.getint('tgz_compresslevel')
+        except (NoOptionError, ValueError):
+            pass
+        # start timer for building/compressing the archive
+        start_time = time.time()
+        dst = self.make_tar_filter(defs, comp=comp, compresslevel=compresslevel)
 
         for tmp in globs:
             subdir = '.'
@@ -2994,8 +3005,9 @@ class VmTool(EnvScript):
         # finish
         dst.close()
         tgz = dst.getvalue()
+        elapsed = time.time() - start_time
         self._PREP_TGZ_CACHE[cmd_name] = tgz
-        time_printf("%s: tgz bytes: %s", cmd_name, len(tgz))
+        time_printf("%s: tgz bytes: %s  elapsed=%.2fs", cmd_name, len(tgz), elapsed)
 
     def load_ca_keypair(self, ca_name):
         intca_dir = self.cf.get(ca_name + '_dir', '')
