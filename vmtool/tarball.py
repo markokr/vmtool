@@ -30,6 +30,8 @@ class TarBall(object):
                           Default is 9 for maximum compression of text scripts
         """
         self.buf = io.BytesIO()
+        self.added_paths = set()  # Track added paths to avoid duplicates
+
         self.comp = comp
         self.compresslevel = compresslevel
 
@@ -78,6 +80,11 @@ class TarBall(object):
         fpath, data = self.filter_data(fpath, data)
         if not fpath:
             return
+
+        # Skip if already added
+        if fpath in self.added_paths:
+            return
+
         if data is not origdata:
             mtime = None
         inf = tarfile.TarInfo(fpath)
@@ -100,6 +107,7 @@ class TarBall(object):
         inf.size = len(data)
 
         self.tf.addfile(inf, io.BytesIO(data))
+        self.added_paths.add(fpath)
 
     def add_dir(self, dpath, mode=TAR_DIR_MODE, mtime=None):
         """Add directory entry."""
@@ -108,7 +116,14 @@ class TarBall(object):
         if not dpath:
             return
 
-        inf = tarfile.TarInfo(dpath + '/')
+        # Normalize directory path with trailing slash for tracking
+        dir_entry = dpath + '/'
+
+        # Skip if already added
+        if dir_entry in self.added_paths:
+            return
+
+        inf = tarfile.TarInfo(dir_entry)
         inf.mtime = mtime or time.time()
         inf.uid = 1000
         inf.gid = 1000
@@ -117,6 +132,7 @@ class TarBall(object):
         inf.mode = mode
         inf.type = tarfile.DIRTYPE
         self.tf.addfile(inf)
+        self.added_paths.add(dir_entry)
 
     def close(self):
         """Close tarball."""
