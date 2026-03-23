@@ -200,6 +200,7 @@ class VmTool(EnvScript):
             'NETWORK': self.conf_func_network,
             'NETMASK': self.conf_func_netmask,
             'MEMBERS': self.conf_func_members,
+            'SECONDARY_VM': self.conf_func_secondary_vm,
         })
         self.process_pkgs()
 
@@ -304,6 +305,8 @@ class VmTool(EnvScript):
         p.add_argument("--running", action="store_true", help="Show only running instances")
         p.add_argument("--az", type=int, help="Set availability zone")
         p.add_argument("--tmux", action="store_true", help="Wrap session in tmux")
+        p.add_argument("-r", help="Filter by role name, wildcards * and ? can be used", dest="role_filter")
+        p.add_argument("-s", action="store_true", help="Sort first by role name", dest="sort_by_role")
         return p
 
     def get_boto3_session(self, region=None):
@@ -626,7 +629,11 @@ class VmTool(EnvScript):
             if sys.platform.startswith('win'):
                 use_colors = False
 
-        vm_list = sorted(vm_list, key=lambda vm: vm['LaunchTime'])
+        if self.options.sort_by_role:
+            vm_list = sorted(vm_list, key=lambda vm: (
+            next(t['Value'] for t in vm['Tags'] if t['Key'] == 'Role'), vm['LaunchTime']))
+        else:
+            vm_list = sorted(vm_list, key=lambda vm: vm['LaunchTime'])
 
         extra_verbose = self.options.verbose and self.options.verbose > 1
         vol_map = {}
@@ -958,14 +965,14 @@ class VmTool(EnvScript):
         time_printf("Waiting for image copy, boot and SSH host key generation")
         client = self.get_ec2_client()
         keys = None
-        time.sleep(30)
+        time.sleep(15)
         retry = 0
-        for i in range(100):
-            time.sleep(30)
+        for i in range(300):
+            time.sleep(5)
             # load console buffer from EC2
             for retry in range(3):
                 try:
-                    cres = client.get_console_output(InstanceId=vm_id)
+                    cres = client.get_console_output(InstanceId=vm_id, Latest=True)
                     break
                 except socket.error as ex:
                     if ex.errno != errno.ETIMEDOUT:
@@ -1042,9 +1049,10 @@ class VmTool(EnvScript):
     def get_env_filters(self):
         """Return default filters based on command-line swithces.
         """
-        return self.make_env_filters(role_name=self.role_name, running=self.options.running, allenvs=self.options.all)
+        return self.make_env_filters(role_name=self.role_name, running=self.options.running, allenvs=self.options.all,
+                                     role_filter=self.options.role_filter)
 
-    def make_env_filters(self, role_name=None, running=True, allenvs=False):
+    def make_env_filters(self, role_name=None, running=True, allenvs=False, role_filter=None):
         """Return filters for instance listing.
         """
         filters = []
@@ -1056,6 +1064,9 @@ class VmTool(EnvScript):
 
         if running:
             filters.append({'Name': 'instance-state-name', 'Values': ['running']})
+
+        if role_filter:
+            filters.append({"Name": "tag:Role", "Values": [role_filter]})
 
         return filters
 
@@ -1141,6 +1152,16 @@ class VmTool(EnvScript):
             #    return vm
 
         raise UsageError("Primary VM not found: %s" % role_name)
+
+    def get_secondary_for_role(self, role_name):
+        """Return the newest secondary VM for the role.
+        """
+        filters = self.make_env_filters(role_name=role_name)
+        filters.append({'Name': 'tag:VmState', 'Values': [VmState.SECONDARY]})
+        vms = list(self.ec2_iter_instances(Filters=filters))
+        if not vms:
+            return None
+        return sorted(vms, key=lambda v: v['LaunchTime']).pop()
 
     def get_primary_vms(self):
         if self.options.all_role_vms:
@@ -1240,10 +1261,10 @@ class VmTool(EnvScript):
                 all_vms = []
             else:
                 all_vms = all_vms[:-1]
-            eprintf("No running earlier failover VMs for %s: %s", self.full_role, ' '.join(all_vms))
+            eprintf("Running earlier failover VMs for %s: %s", self.full_role, ' '.join(all_vms))
         elif self.options.latest_fo_vm:
             all_vms = all_vms[-1:]
-            eprintf("No running latest failover VM for %s: %s", self.full_role, ' '.join(all_vms))
+            eprintf("Running latest failover VM for %s: %s", self.full_role, ' '.join(all_vms))
         else:
             eprintf("Running failover VMs for %s: %s", self.full_role, ' '.join(all_vms))
 
@@ -2255,7 +2276,7 @@ class VmTool(EnvScript):
         # actual launch
         res = client.run_instances(**args)
 
-        time.sleep(20)      # FIXME
+        time.sleep(10)      # FIXME
 
         # collect ids
         ids = []
@@ -2570,11 +2591,11 @@ class VmTool(EnvScript):
             script.append(mk_sshuser_script(user, auth_groups, pubkey))
         return '\n'.join(script)
 
-    def make_tar_filter(self, extra_defs=None):
+    def make_tar_filter(self, extra_defs=None, comp='xz', compresslevel=9):
         defs = {}
         if extra_defs:
             defs.update(extra_defs)
-        tb = TarFilter(self.filter_key_lookup, defs)
+        tb = TarFilter(self.filter_key_lookup, defs, comp=comp, compresslevel=compresslevel)
         tb.set_live(self.is_live)
         return tb
 
@@ -2695,6 +2716,14 @@ class VmTool(EnvScript):
         Usage: ${PRIMARY_VM ! ${other_role}}
         """
         vm = self.get_primary_for_role(arg)
+        return vm['InstanceId']
+
+    def conf_func_secondary_vm(self, arg, sect, kname):
+        """Lookup the newest secondary VM. If no secondary VM-s, return primary.
+
+        Usage: ${SECONDARY_VM ! ${role}}
+        """
+        vm = self.get_secondary_for_role(arg) or self.get_primary_for_role(arg)
         return vm['InstanceId']
 
     def conf_func_network(self, arg, sect, kname):
@@ -2902,7 +2931,18 @@ class VmTool(EnvScript):
         if not mods_ok:
             sys.exit(1)
 
-        dst = self.make_tar_filter(defs)
+        # allow compression algorithm to be configured; default is xz (best for text)
+        # options: 'gz' (gzip), 'bz2' (bzip2), 'xz' (lzma), or '' (no compression)
+        comp = self.cf.get('tgz_compression', 'xz')
+        # compression level (1-9, where 9 is highest); default is 9 for maximum compression
+        compresslevel = 9
+        try:
+            compresslevel = self.cf.getint('tgz_compresslevel')
+        except (NoOptionError, ValueError):
+            pass
+        # start timer for building/compressing the archive
+        start_time = time.time()
+        dst = self.make_tar_filter(defs, comp=comp, compresslevel=compresslevel)
 
         for tmp in globs:
             subdir = '.'
@@ -2965,8 +3005,9 @@ class VmTool(EnvScript):
         # finish
         dst.close()
         tgz = dst.getvalue()
+        elapsed = time.time() - start_time
         self._PREP_TGZ_CACHE[cmd_name] = tgz
-        time_printf("%s: tgz bytes: %s", cmd_name, len(tgz))
+        time_printf("%s: tgz bytes: %s  elapsed=%.2fs", cmd_name, len(tgz), elapsed)
 
     def load_ca_keypair(self, ca_name):
         intca_dir = self.cf.get(ca_name + '_dir', '')
@@ -4467,12 +4508,17 @@ class VmTool(EnvScript):
                 msgtarget = ''
                 if mod.get("TargetThroughput") and mod.get("OriginalThroughput"):
                     msgtarget = " oldthroughput={OriginalThroughput} newthroughput={TargetThroughput}".format(**mod)
+                msgiops = ''
+                if mod.get("OriginalIops") and mod.get("TargetIops"):
+                    msgiops = " oldiops={OriginalIops} newiops={TargetIops}".format(**mod)
                 printf(
                     "{VolumeId}: state={ModificationState}"
                     " oldsize={OriginalSize} newsize={TargetSize}"
-                    " oldiops={OriginalIops} newiops={TargetIops}"
+                    "{msgiops}"
                     "{msgtarget}"
-                    " progress={Progress}%{msgstatus}".format(msgstatus=msgstatus, msgtarget=msgtarget, **mod))
+                    " progress={Progress}%{msgstatus}".format(
+                        msgstatus=msgstatus, msgtarget=msgtarget, msgiops=msgiops, **mod
+                ))
 
             if not incomplete:
                 break
