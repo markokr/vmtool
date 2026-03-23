@@ -30,7 +30,6 @@ class TarBall(object):
                           Default is 9 for maximum compression of text scripts
         """
         self.buf = io.BytesIO()
-        self.tf = tarfile.open('buf.tgz', 'w|gz', self.buf, format=tarfile.PAX_FORMAT)
         self.added_paths = set()  # Track added paths to avoid duplicates
 
         self.comp = comp
