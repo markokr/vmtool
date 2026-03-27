@@ -2838,13 +2838,14 @@ class VmTool(EnvScript):
         use_admin = cmd_cf.getboolean('use_admin', False)
 
         self._PREP_TGZ_CACHE[cmd_name] = b''
-        self.modcmd_build_tgz(cmd_name, globs, cmd_cf)
+        comp = self.modcmd_build_tgz(cmd_name, globs, cmd_cf)
 
         self._PREP_STAMP_CACHE[cmd_name] = {
             'cmd_abbr': cmd_abbr,
             'stamp_dirs': stamp_dirs,
             'stamp': self.get_stamp(),
             'use_admin': use_admin,
+            'comp': comp,
         }
 
     def modcmd_run(self, cmd_name, vm_ids):
@@ -2857,7 +2858,7 @@ class VmTool(EnvScript):
             if not data_info:
                 data_info = 1
             print('RUNNING...')
-            self.run_mod_data(data, vm_id, use_admin=info['use_admin'], title=cmd_name)
+            self.run_mod_data(data, vm_id, use_admin=info['use_admin'], title=cmd_name, comp=info['comp'])
             if info['cmd_abbr']:
                 self.set_stamp(vm_id, info['cmd_abbr'], info['stamp'], *info['stamp_dirs'])
 
@@ -3008,6 +3009,7 @@ class VmTool(EnvScript):
         elapsed = time.time() - start_time
         self._PREP_TGZ_CACHE[cmd_name] = tgz
         time_printf("%s: tgz bytes: %s  elapsed=%.2fs", cmd_name, len(tgz), elapsed)
+        return comp
 
     def load_ca_keypair(self, ca_name):
         intca_dir = self.cf.get(ca_name + '_dir', '')
@@ -3028,7 +3030,7 @@ class VmTool(EnvScript):
             raise UsageError("CA key not found: %s" % last_key)
         return (last_key, last_crt)
 
-    def run_mod_data(self, data, vm_id, use_admin=False, title=None):
+    def run_mod_data(self, data, vm_id, use_admin=False, title=None, comp='gz'):
 
         tmp_uuid = str(uuid.uuid4())
         run_user = 'root'
@@ -3039,9 +3041,18 @@ class VmTool(EnvScript):
             launcher = 'sudo -nH -u %s %s' % (run_user, launcher)
             rm_cmd = 'sudo -nH ' + rm_cmd
 
+        # Map compression type to tar flag
+        tar_flags_map = {
+            'gz': 'xzf',
+            'bz2': 'xjf',
+            'xz': 'xJf',
+            '': 'xf',
+        }
+        tar_flags = tar_flags_map.get(comp, 'xzf')  # default to gzip for backward compat
+
         time_printf("%s: Sending data - %d bytes", vm_id, len(data))
-        decomp_script = 'install -d -m 711 tmp && mkdir -p "tmp/%s" && tar xzf - --warning=no-timestamp -C "tmp/%s"' % (
-            tmp_uuid, tmp_uuid
+        decomp_script = 'install -d -m 711 tmp && mkdir -p "tmp/%s" && tar %s - --warning=no-timestamp -C "tmp/%s"' % (
+            tmp_uuid, tar_flags, tmp_uuid
         )
         self.vm_exec(vm_id, ["/bin/sh", "-c", decomp_script, 'decomp'], data, use_admin=use_admin)
 
