@@ -26,8 +26,8 @@ class TarFilter(TarBall):
 
     _password_master = None
 
-    def __init__(self, key_lookup_func, key_lookup_arg, comp='xz', compresslevel=9):
-        super(TarFilter, self).__init__(comp=comp, compresslevel=compresslevel)
+    def __init__(self, key_lookup_func, key_lookup_arg):
+        super(TarFilter, self).__init__()
         self.live = 0
         self.key_lookup_func = key_lookup_func
         self.key_lookup_arg = key_lookup_arg
