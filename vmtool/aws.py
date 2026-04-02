@@ -2591,11 +2591,11 @@ class VmTool(EnvScript):
             script.append(mk_sshuser_script(user, auth_groups, pubkey))
         return '\n'.join(script)
 
-    def make_tar_filter(self, extra_defs=None, comp='xz', compresslevel=9):
+    def make_tar_filter(self, extra_defs=None):
         defs = {}
         if extra_defs:
             defs.update(extra_defs)
-        tb = TarFilter(self.filter_key_lookup, defs, comp=comp, compresslevel=compresslevel)
+        tb = TarFilter(self.filter_key_lookup, defs)
         tb.set_live(self.is_live)
         return tb
 
@@ -2838,14 +2838,13 @@ class VmTool(EnvScript):
         use_admin = cmd_cf.getboolean('use_admin', False)
 
         self._PREP_TGZ_CACHE[cmd_name] = b''
-        comp = self.modcmd_build_tgz(cmd_name, globs, cmd_cf)
+        self.modcmd_build_tgz(cmd_name, globs, cmd_cf)
 
         self._PREP_STAMP_CACHE[cmd_name] = {
             'cmd_abbr': cmd_abbr,
             'stamp_dirs': stamp_dirs,
             'stamp': self.get_stamp(),
             'use_admin': use_admin,
-            'comp': comp,
         }
 
     def modcmd_run(self, cmd_name, vm_ids):
@@ -2858,7 +2857,7 @@ class VmTool(EnvScript):
             if not data_info:
                 data_info = 1
             print('RUNNING...')
-            self.run_mod_data(data, vm_id, use_admin=info['use_admin'], title=cmd_name, comp=info['comp'])
+            self.run_mod_data(data, vm_id, use_admin=info['use_admin'], title=cmd_name)
             if info['cmd_abbr']:
                 self.set_stamp(vm_id, info['cmd_abbr'], info['stamp'], *info['stamp_dirs'])
 
@@ -2932,18 +2931,7 @@ class VmTool(EnvScript):
         if not mods_ok:
             sys.exit(1)
 
-        # allow compression algorithm to be configured; default is xz (best for text)
-        # options: 'gz' (gzip), 'bz2' (bzip2), 'xz' (lzma), or '' (no compression)
-        comp = self.cf.get('tgz_compression', 'xz')
-        # compression level (1-9, where 9 is highest); default is 9 for maximum compression
-        compresslevel = 9
-        try:
-            compresslevel = self.cf.getint('tgz_compresslevel')
-        except (NoOptionError, ValueError):
-            pass
-        # start timer for building/compressing the archive
-        start_time = time.time()
-        dst = self.make_tar_filter(defs, comp=comp, compresslevel=compresslevel)
+        dst = self.make_tar_filter(defs)
 
         for tmp in globs:
             subdir = '.'
@@ -3006,10 +2994,8 @@ class VmTool(EnvScript):
         # finish
         dst.close()
         tgz = dst.getvalue()
-        elapsed = time.time() - start_time
         self._PREP_TGZ_CACHE[cmd_name] = tgz
-        time_printf("%s: tgz bytes: %s  elapsed=%.2fs", cmd_name, len(tgz), elapsed)
-        return comp
+        time_printf("%s: tgz bytes: %s", cmd_name, len(tgz))
 
     def load_ca_keypair(self, ca_name):
         intca_dir = self.cf.get(ca_name + '_dir', '')
@@ -3030,7 +3016,7 @@ class VmTool(EnvScript):
             raise UsageError("CA key not found: %s" % last_key)
         return (last_key, last_crt)
 
-    def run_mod_data(self, data, vm_id, use_admin=False, title=None, comp='gz'):
+    def run_mod_data(self, data, vm_id, use_admin=False, title=None):
 
         tmp_uuid = str(uuid.uuid4())
         run_user = 'root'
@@ -3041,18 +3027,9 @@ class VmTool(EnvScript):
             launcher = 'sudo -nH -u %s %s' % (run_user, launcher)
             rm_cmd = 'sudo -nH ' + rm_cmd
 
-        # Map compression type to tar flag
-        tar_flags_map = {
-            'gz': 'xzf',
-            'bz2': 'xjf',
-            'xz': 'xJf',
-            '': 'xf',
-        }
-        tar_flags = tar_flags_map.get(comp, 'xzf')  # default to gzip for backward compat
-
         time_printf("%s: Sending data - %d bytes", vm_id, len(data))
-        decomp_script = 'install -d -m 711 tmp && mkdir -p "tmp/%s" && tar %s - --warning=no-timestamp -C "tmp/%s"' % (
-            tmp_uuid, tar_flags, tmp_uuid
+        decomp_script = 'install -d -m 711 tmp && mkdir -p "tmp/%s" && tar xzf - --warning=no-timestamp -C "tmp/%s"' % (
+            tmp_uuid, tmp_uuid
         )
         self.vm_exec(vm_id, ["/bin/sh", "-c", decomp_script, 'decomp'], data, use_admin=use_admin)
 
