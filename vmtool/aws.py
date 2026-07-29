@@ -645,6 +645,18 @@ class VmTool(EnvScript):
         if extra_verbose:
             vol_map = self.get_volume_map(vm_list)
 
+        tg_attached = set()
+        has_stateless = any(
+            tag.get('Key') == 'Stateless' and str(tag.get('Value', '')).lower() == 'true'
+            for vm in vm_list for tag in vm.get('Tags', []))
+        if has_stateless:
+            elbv2 = self.get_boto3_client('elbv2')
+            for page in elbv2.get_paginator('describe_target_groups').paginate():
+                for tg in page['TargetGroups']:
+                    health = elbv2.describe_target_health(TargetGroupArn=tg['TargetGroupArn'])
+                    for th in health['TargetHealthDescriptions']:
+                        tg_attached.add(th['Target']['Id'])
+
         for vm in vm_list:
             if not self.options.all:
                 if not self._check_tags(vm.get('Tags')):
@@ -677,11 +689,28 @@ class VmTool(EnvScript):
                         eni += ' desc=' + iface.get('Description')
                     extra_lines.append(eni)
 
+            vm_env = '-'
+            vm_role = ''
+            vm_stateless = False
+            for tag in vm.get('Tags', []):
+                if tag['Key'] == 'Env':
+                    vm_env = tag['Value']
+                elif tag['Key'] == 'Role':
+                    vm_role = tag['Value']
+                elif tag['Key'] == 'Stateless' and str(tag.get('Value', '')).lower() == 'true':
+                    vm_stateless = True
+
             # add colors
             c1 = ""
             c2 = ""
             if use_colors:
-                if eip:
+                if vm_stateless:
+                    if vm['State']['Name'] == 'running':
+                        if vm.get('PrivateIpAddress') and vm['PrivateIpAddress'] in tg_attached:
+                            c1 = "\033[32m"     # green
+                        else:
+                            c1 = "\033[31m"     # red      
+                elif eip:
                     if vm['State']['Name'] == 'running':
                         c1 = "\033[32m"     # green
                     else:
@@ -692,14 +721,6 @@ class VmTool(EnvScript):
                 # close color
                 if c1:
                     c2 = "\033[0m"
-
-            vm_env = '-'
-            vm_role = ''
-            for tag in vm.get('Tags', []):
-                if tag['Key'] == 'Env':
-                    vm_env = tag['Value']
-                elif tag['Key'] == 'Role':
-                    vm_role = tag['Value']
 
             name += " Env=" + vm_env
             if vm_role:
