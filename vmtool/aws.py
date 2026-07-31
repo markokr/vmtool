@@ -2336,9 +2336,9 @@ class VmTool(EnvScript):
     # No-op unless cloudwatch_alarm_checks is set.  AWS evaluates the
     # metrics and pushes state changes; vmtool only manages the objects.
     CW_ALARM_SPECS = {
-        'system': ('StatusCheckFailed_System', 1),
+        'system': ('StatusCheckFailed_System', 2),
         'instance': ('StatusCheckFailed_Instance', 2),
-        'ebs': ('StatusCheckFailed_AttachedEBS', 1),
+        'ebs': ('StatusCheckFailed_AttachedEBS', 2),
     }
     CW_ALARM_PAGES = ('system', 'ebs')
 
@@ -2372,8 +2372,7 @@ class VmTool(EnvScript):
                     EvaluationPeriods=evals,
                     Threshold=1,
                     ComparisonOperator='GreaterThanOrEqualToThreshold',
-                    AlarmActions=actions,
-                    OKActions=actions)
+                    AlarmActions=actions)
             except Exception as ex:
                 eprintf("WARNING: alarm create failed (%s/%s), %d/%d alarms set, fix with alarm-sync: %s",
                         vm_id, check, done, len(checks), ex)
