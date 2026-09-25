@@ -32,16 +32,17 @@ XEONS = [
     "X11 Granite",
 ]
 
-EPYC_V1 = "E1 Naples"
-EPYC_V2 = "E2 Rome"
-EPYC_V3 = "E3 Milan"
-EPYC_V4 = "E4 Genoa"
-EPYC_V5 = "E5 Turin"
+EPYC_V1 = "E1 Naples" # Zen 1 - 7571
+EPYC_V2 = "E2 Rome"   # Zen 2 - 7R32
+EPYC_V3 = "E3 Milan"  # Zen 3 - 7R13
+EPYC_V4 = "E4 Genoa"  # Zen 4 - 9R14
+EPYC_V5 = "E5 Turin"  # Zen 5 - 9R45, 9R05, 9575F
 
 AWS_GRAVITON = "G1 ARMv8"
 AWS_GRAVITON2 = "G2 ARMv82"
 AWS_GRAVITON3 = "G3 ARMv84"
 AWS_GRAVITON4 = "G4 ARMv90"
+AWS_GRAVITON5 = "G5 ARMv92"
 
 NVIDIA_GRACE = "N1 Grace"
 
@@ -78,10 +79,13 @@ CPU_CODES = {
     "AMD EPYC 7R13 Processor": EPYC_V3,
     "AMD EPYC 9R14 Processor": EPYC_V4,
     "AMD EPYC 9R45 Processor": EPYC_V5,
+    "AMD EPYC 9R05 Processor": EPYC_V5,
+    "AMD EPYC 9575F": EPYC_V5,
     "AWS Graviton Processor": AWS_GRAVITON,
     "AWS Graviton2 Processor": AWS_GRAVITON2,
     "AWS Graviton3 Processor": AWS_GRAVITON3,
     "AWS Graviton4 Processor": AWS_GRAVITON4,
+    "AWS Graviton5 Processor": AWS_GRAVITON5,
     "NVIDIA Grace": NVIDIA_GRACE,
     "High Frequency Intel Xeon E7-8880 v3 (Haswell)": xeon(3, "E7-8880"),
     "Intel Skylake E5 2686 v5 (2.5 GHz)": xeon(5, "E5-2686"),
@@ -229,7 +233,7 @@ def getPriceMap(rec):
         priceMap[rname] = price
 
     pdata = list(ondemand[0]["priceDimensions"].values())
-    if pdata[0]["unit"] != "Hrs":
+    if pdata[0]["unit"] not in ("Hrs", "Hours"):
         raise Exception("invalid price unit: %r" % pdata[0]["unit"])
     priceunit = getPricePerUnit(pdata[0])
     price = priceunit * 24 * 30
@@ -352,7 +356,7 @@ def getClockSpeed(rec):
     return 0.1
 
 
-_rx_storage = r"^(?:(\d+)\s+x\s+)?(\d+)(?:\s*(?:gb|nvme|ssd|hdd))*$"
+_rx_storage = r"^(?:(\d+)\s*x\s*)?(\d+)(?:\s*(?:gb|nvme|ssd|hdd))*$"
 _rc_storage = re.compile(_rx_storage, re.A)
 
 def getLocalStorage(rec):
